@@ -15,22 +15,21 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
+import { Money } from "@/components/currency/currency-store";
 import { CopilotBar } from "@/components/dashboard/CopilotBar";
 import { SpendingChart } from "@/components/dashboard/SpendingChart";
 import {
   MOCK_AS_OF,
+  MOCK_EXCHANGE_RATES,
   MOCK_OPENING_BALANCE_CENTS,
   mockTransactions,
   type Category,
 } from "@/data/mockTransactions";
-import { formatCents, formatInrPaise, usdCentsToInrPaise, USD_TO_INR_DEMO_RATE } from "@/lib/balance";
 import { dailySpending, formatPercent, monthTotals, percentChange, totalBalanceCents } from "@/lib/insights";
 
 export const metadata: Metadata = {
   title: "Dashboard",
 };
-
-const inr = (cents: number) => formatInrPaise(usdCentsToInrPaise(cents));
 
 const shortDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" });
@@ -55,7 +54,7 @@ function StatCard({
 }: {
   label: string;
   icon: LucideIcon;
-  value: string;
+  value: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (
@@ -66,7 +65,12 @@ function StatCard({
           <Icon className="size-4" aria-hidden="true" />
         </span>
       </div>
-      <p className="mt-3 text-2xl font-semibold tracking-tight text-white tabular-nums sm:text-[1.75rem]">{value}</p>
+      <p
+        className="mt-3 text-2xl font-semibold tracking-tight text-white tabular-nums sm:text-[1.75rem]"
+        data-testid={`stat-${label.toLowerCase().replace(/\s+/g, "-")}`}
+      >
+        {value}
+      </p>
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500">{children}</div>
     </section>
   );
@@ -78,7 +82,7 @@ export default function Dashboard() {
   const { incomeCents, expensesCents } = monthTotals(mockTransactions, MOCK_AS_OF);
   const spending = dailySpending(mockTransactions, MOCK_AS_OF, 7);
   const spentLast7 = spending.reduce((sum, d) => sum + d.spendingCents, 0);
-  const chartData = spending.map((d) => ({ label: weekday.format(toDate(d.date)), dollars: d.spendingCents / 100 }));
+  const chartData = spending.map((d) => ({ label: weekday.format(toDate(d.date)), usdCents: d.spendingCents }));
   const transactions = [...mockTransactions].sort((a, b) => b.date.localeCompare(a.date));
 
   const trendUp = trend !== null && trend >= 0;
@@ -89,7 +93,7 @@ export default function Dashboard() {
       <div className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 pt-6 sm:px-6 lg:px-8 lg:pt-8">
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-3">
-          <StatCard label="Total Balance" icon={Wallet} value={formatCents(balance)}>
+          <StatCard label="Total Balance" icon={Wallet} value={<Money cents={balance} />}>
             {trend !== null && (
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-medium ${
@@ -102,17 +106,12 @@ export default function Dashboard() {
               </span>
             )}
             <span>vs. start of month</span>
-            <span className="basis-full tabular-nums" title={`Fixed demo rate: ₹${USD_TO_INR_DEMO_RATE} = $1, not live`}>
-              ≈ {inr(balance)}
-            </span>
           </StatCard>
-          <StatCard label="Income" icon={ArrowDownLeft} value={formatCents(incomeCents)}>
+          <StatCard label="Income" icon={ArrowDownLeft} value={<Money cents={incomeCents} />}>
             <span>This month</span>
-            <span className="basis-full tabular-nums">≈ {inr(incomeCents)}</span>
           </StatCard>
-          <StatCard label="Expenses" icon={ArrowUpRight} value={formatCents(expensesCents)}>
+          <StatCard label="Expenses" icon={ArrowUpRight} value={<Money cents={expensesCents} />}>
             <span>This month</span>
-            <span className="basis-full tabular-nums">≈ {inr(expensesCents)}</span>
           </StatCard>
         </div>
 
@@ -130,7 +129,7 @@ export default function Dashboard() {
             </div>
             <p className="text-right">
               <span className="block text-xl font-semibold tracking-tight text-white tabular-nums">
-                {formatCents(spentLast7)}
+                <Money cents={spentLast7} />
               </span>
               <span className="text-xs text-zinc-500">total spent</span>
             </p>
@@ -196,15 +195,12 @@ export default function Dashboard() {
                     <td className="hidden whitespace-nowrap px-5 py-3 text-zinc-400 sm:table-cell">
                       {shortDate.format(toDate(t.date))}
                     </td>
-                    <td className="whitespace-nowrap px-5 py-3 text-right tabular-nums">
-                      <p className={`font-medium ${isIncome ? "text-emerald-400" : "text-zinc-100"}`}>
-                        {isIncome ? "+" : ""}
-                        {formatCents(t.amountCents)}
-                      </p>
-                      <p className="text-xs text-zinc-500">
-                        {isIncome ? "+" : ""}
-                        {inr(t.amountCents)}
-                      </p>
+                    <td
+                      className={`whitespace-nowrap px-5 py-3 text-right font-medium tabular-nums ${
+                        isIncome ? "text-emerald-400" : "text-zinc-100"
+                      }`}
+                    >
+                      <Money cents={t.amountCents} signed />
                     </td>
                   </tr>
                 );
@@ -214,7 +210,8 @@ export default function Dashboard() {
         </section>
 
         <p className="text-center text-xs text-zinc-600">
-          Rupee amounts use a fixed demo rate of ₹{USD_TO_INR_DEMO_RATE} = $1, not a live exchange rate.
+          Other currencies use fixed demo rates (1 USD = {MOCK_EXCHANGE_RATES.INR} INR, {MOCK_EXCHANGE_RATES.EUR} EUR,{" "}
+          {MOCK_EXCHANGE_RATES.GBP} GBP), not live exchange rates.
         </p>
       </div>
 

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import DashboardLayout from "@/app/dashboard/layout";
 import Dashboard from "@/app/dashboard/page";
+import { resetCurrencyForTests } from "@/components/currency/currency-store";
 
 beforeAll(() => {
   // The chart measures its container; jsdom doesn't provide ResizeObserver.
@@ -13,7 +14,19 @@ beforeAll(() => {
   } as unknown as typeof ResizeObserver;
 });
 
+beforeEach(() => {
+  window.localStorage.clear();
+  resetCurrencyForTests();
+});
+
 afterEach(cleanup);
+
+const chooseCurrency = (code: string) => {
+  fireEvent.click(screen.getByRole("button", { name: /display currency/i }));
+  act(() => {
+    fireEvent.click(screen.getByRole("menuitemradio", { name: new RegExp(`^.?\\s*${code}`) }));
+  });
+};
 
 const renderDashboard = () =>
   render(
@@ -71,6 +84,55 @@ describe("Dashboard (/dashboard)", () => {
     fireEvent.change(input, { target: { value: "Can I afford a $300 phone?" } });
     fireEvent.click(send);
     expect(screen.getByRole("status").textContent).toMatch(/isn't connected yet/i);
+  });
+
+  it("has a currency selector with USD, INR, EUR and GBP", () => {
+    renderDashboard();
+    fireEvent.click(screen.getByRole("button", { name: /display currency: us dollar/i }));
+    const options = screen.getAllByRole("menuitemradio");
+    expect(options.map((o) => o.textContent)).toEqual([
+      "$USDUS Dollar",
+      "₹INRIndian Rupee",
+      "€EUREuro",
+      "£GBPBritish Pound",
+    ]);
+    expect(options[0].getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("updates stats, chart total and transactions instantly when the currency changes", () => {
+    renderDashboard();
+    const balance = () => screen.getByTestId("stat-total-balance").textContent;
+    const income = () => screen.getByTestId("stat-income").textContent;
+    const expenses = () => screen.getByTestId("stat-expenses").textContent;
+    const spent = () => within(screen.getByRole("region", { name: "Spending" })).getByText(/total spent/).previousSibling?.textContent;
+    const payroll = () => screen.getByText("Acme Corp Payroll").closest("tr")!.lastElementChild!.textContent;
+
+    expect(balance()).toBe("$14,922.54");
+
+    chooseCurrency("INR");
+    expect(balance()).toBe("₹12,46,032.09");
+    expect(income()).toBe("₹3,21,475.00");
+    expect(expenses()).toBe("₹1,47,582.91");
+    expect(spent()).toBe("₹26,507.91");
+    expect(payroll()).toBe("+₹2,71,375.00");
+    expect(screen.getByRole("img", { name: /in INR/ })).toBeTruthy();
+
+    chooseCurrency("EUR");
+    expect(balance()).toBe("€13,728.74");
+    expect(payroll()).toBe("+€2,990.00");
+
+    chooseCurrency("GBP");
+    expect(balance()).toBe("£11,788.81");
+    expect(spent()).toBe("£250.79");
+
+    chooseCurrency("USD");
+    expect(balance()).toBe("$14,922.54");
+  });
+
+  it("remembers the chosen currency", () => {
+    renderDashboard();
+    chooseCurrency("INR");
+    expect(window.localStorage.getItem("moneypulse.currency")).toBe("INR");
   });
 
   it("contains no emojis (design rule)", () => {

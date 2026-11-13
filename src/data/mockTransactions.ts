@@ -1,3 +1,5 @@
+import type { ExchangeRates } from "@/lib/currency";
+
 // Mock data only. Not connected to any bank.
 // Amounts are in whole cents to avoid rounding errors:
 // positive = money in, negative = money out.
@@ -22,6 +24,17 @@ export type Transaction = {
 
 /** The "today" the mock data is written for. Used instead of the real clock so results are stable. */
 export const MOCK_AS_OF = "2026-11-12";
+
+/**
+ * FIXED DEMO EXCHANGE RATES: units of each currency per 1 US dollar. Not live.
+ * Replace with rates fetched server-side before real use.
+ */
+export const MOCK_EXCHANGE_RATES: ExchangeRates = {
+  USD: 1,
+  INR: 83.5,
+  EUR: 0.92,
+  GBP: 0.79,
+};
 
 /** Account balance at the start of the month, before the transactions below. */
 export const MOCK_OPENING_BALANCE_CENTS = 1284000; // $12,840.00

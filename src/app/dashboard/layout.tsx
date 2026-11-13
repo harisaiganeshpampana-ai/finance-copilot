@@ -1,5 +1,6 @@
 import { Menu, UserRound } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { CurrencySelector } from "@/components/currency/CurrencySelector";
 import { NavLinks } from "@/components/dashboard/nav";
 import { mockUser } from "@/data/mockUser";
 
@@ -44,15 +45,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </details>
               <div className="min-w-0">
                 <h1 className="truncate text-base font-semibold tracking-tight text-white sm:text-lg">
-                  Welcome back, {mockUser.firstName}
+                  <span className="sm:hidden" aria-hidden="true">
+                    Hi, {mockUser.firstName}
+                  </span>
+                  <span className="sr-only sm:not-sr-only">Welcome back, {mockUser.firstName}</span>
                 </h1>
                 <p className="hidden text-xs text-zinc-500 sm:block">Here&apos;s where your money stands today.</p>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-3">
-              <span className="hidden rounded-full border border-zinc-800 px-2.5 py-1 text-xs text-zinc-400 sm:inline">
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+              <span className="hidden rounded-full border border-zinc-800 px-2.5 py-1 text-xs text-zinc-400 md:inline">
                 Demo data
               </span>
+              <CurrencySelector />
               <button
                 type="button"
                 className="grid size-9 place-items-center rounded-full border border-zinc-700 bg-zinc-800 text-zinc-300 transition-colors hover:border-zinc-600 hover:text-white"

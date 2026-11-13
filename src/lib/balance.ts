@@ -20,22 +20,4 @@ export function calculateBalanceCents(transactions: Transaction[]): number {
 export function formatCents(cents: number, currency: string = CURRENCY): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
 }
-
-/**
- * FIXED DEMO RATE: rupees per 1 US dollar. Not a live exchange rate.
- * Replace with a live rate (fetched server-side) before real use.
- */
-export const USD_TO_INR_DEMO_RATE = 88;
-
-/** Converts US cents to Indian paise (1/100 rupee), rounded to the nearest paisa. */
-export function usdCentsToInrPaise(cents: number, rate: number = USD_TO_INR_DEMO_RATE): number {
-  if (!Number.isFinite(rate) || rate <= 0) {
-    throw new Error(`Invalid exchange rate: ${rate}`);
-  }
-  return Math.round(cents * rate);
-}
-
-/** Formats paise as rupees with Indian digit grouping, e.g. 18326352 -> "₹1,83,263.52". */
-export function formatInrPaise(paise: number): string {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(paise / 100);
-}
+// Multi-currency conversion and formatting live in `@/lib/currency`.

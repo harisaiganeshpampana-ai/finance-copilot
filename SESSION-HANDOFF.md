@@ -34,6 +34,35 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-13 — Day 5: Multi-currency
+
+**Goal for today**
+- Currency selector (USD, INR, EUR, GBP) that updates every amount on the dashboard instantly.
+
+**What got done**
+- Currency dropdown in the dashboard top bar, next to the avatar (`src/components/currency/CurrencySelector.tsx`).
+- One app-wide currency setting (`src/components/currency/currency-store.tsx`). Stat cards, chart (line, axis, tooltip), chart total and every transaction update instantly, with no reload. The choice is remembered in the browser.
+- Formatting uses `Intl.NumberFormat` per currency: INR uses Indian grouping (₹1,00,000.00); USD $100,000.00; EUR €100,000.00; GBP £100,000.00.
+- Fixed demo rates in `src/data/mockTransactions.ts` (`MOCK_EXCHANGE_RATES`): 1 USD = 83.5 INR, 0.92 EUR, 0.79 GBP. A note under the table says they are not live.
+- Replaced Day 2's separate "INR underneath" display and its ₹88 rate with this system.
+- On phones the greeting shortens to "Hi, Hari" so the selector fits.
+- Tests: `currency.test.ts` (conversion, formatting, rounding, bad input) and dashboard tests that switch through all four currencies and check every section. 46 tests total.
+
+**What's in progress (not finished)**
+- Nothing.
+
+**Blockers / decisions needed**
+- Rates are hardcoded. Before launch, fetch live rates on the server (keeping any API key server-side).
+- Transactions are stored in USD and converted for display. A real multi-currency product would store each transaction in its original currency.
+- The landing page preview still shows USD only (no selector there).
+
+**Tests**
+- [x] `npm test` passes (46)
+- [x] `npm run build` passes
+
+**Next steps (for the next session)**
+1. Wire the Copilot to the AI through a server route.
+
 ### 2026-11-13 — Day 4: Premium dashboard
 
 **Goal for today**
