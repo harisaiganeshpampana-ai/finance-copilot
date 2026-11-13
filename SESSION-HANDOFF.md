@@ -34,6 +34,36 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-13 — Day 2: Mock transactions page
+
+**Goal for today**
+- Rename the app to "MoneyPulse (Working Title)".
+- Show 10 mock transactions and a total Balance, styled with Tailwind.
+- Add an automated test for the balance calculation.
+
+**What got done**
+- Page title (browser tab) and header now say "MoneyPulse (Working Title)".
+- Home page shows a Balance card and a list of 10 mock transactions (date, merchant, amount). Income shows in green with a "+".
+- Mock data lives in `src/data/mockTransactions.ts`. No bank connection.
+- Balance logic in `src/lib/balance.ts`. Money is stored in whole cents to avoid rounding errors; bad amounts are rejected.
+- Tests in `src/__tests__/balance.test.ts` check the math, including negatives, rounding, bad data, and the mock total ($2,082.54).
+
+**What's in progress (not finished)**
+- Nothing.
+
+**Blockers / decisions needed**
+- Currency is US dollars for now (one setting in `src/lib/balance.ts`). Confirm the target market/currency.
+
+**Tests**
+- [x] `npm test` passes
+- [x] `npm run build` passes
+
+**Next steps (for the next session)**
+1. Decide the next feature (e.g. spending categories, or adding a transaction with server-side validation).
+
+**Notes**
+- Still mock data only; real bank APIs come later and must keep API keys server-side.
+
 ### 2026-11-13 — Foundation setup
 
 **Goal for today**
