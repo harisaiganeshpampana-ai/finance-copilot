@@ -12,6 +12,7 @@ const tx = (id: string, amountCents: number): Transaction => ({
   id,
   date: "2026-11-01",
   merchant: "Test Merchant",
+  category: amountCents > 0 ? "income" : "shopping",
   amountCents,
 });
 

@@ -34,6 +34,43 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-13 — Day 4: Premium dashboard
+
+**Goal for today**
+- Turn `/dashboard` into a real app layout (Stripe/Mercury feel). AI not wired yet.
+
+**What got done**
+- App frame (`src/app/dashboard/layout.tsx`): fixed left sidebar (logo, Overview, Transactions, AI Copilot, Settings) and a top bar ("Welcome back, Hari" + account avatar). On phones the sidebar becomes a menu button.
+- Three stat cards: Total Balance ($14,922.54, +16.2% vs. start of month), Income this month ($3,850.00), Expenses this month ($1,767.46). Each also shows the rupee amount.
+- 7-day spending area chart (recharts, indigo gradient, hover tooltip): $317.46 total.
+- Transactions redesigned as a table with category icons (bank, cart, house, car, etc.), category, date, amount, and hover highlight.
+- Floating "Can I afford this?" Copilot bar at the bottom. UI only: it sends nothing and says the Copilot isn't connected yet.
+- New calculation logic in `src/lib/insights.ts` (balance with opening balance, % change, month totals, daily spending), fully tested. 40 tests total.
+
+**Mock data changes**
+- Each transaction now has a category (drives its icon).
+- Added a start-of-month balance ($12,840.00) so the balance trend is real math, not a made-up number.
+- A few dates moved (rent to the 1st; a few bills into the last 7 days) so the chart has data each day. Count (10) and net total ($2,082.54) unchanged.
+- The mock "today" is fixed at Nov 12, 2026 (`MOCK_AS_OF`) so figures stay stable.
+- Mock user name "Hari" in `src/data/mockUser.ts`.
+
+**What's in progress (not finished)**
+- Nothing.
+
+**Blockers / decisions needed**
+- Sidebar: "Transactions" and "AI Copilot" jump to sections on the Overview page; "Settings" shows "Soon". Separate pages come later.
+- The avatar button doesn't open anything yet (no accounts).
+
+**Tests**
+- [x] `npm test` passes (40)
+- [x] `npm run build` passes
+
+**Next steps (for the next session)**
+1. Wire the Copilot to the AI through a server route (server-side validation, API key server-only, cash-flow/debt guidance only).
+
+**Notes**
+- New package: `recharts` (charts).
+
 ### 2026-11-13 — Day 3: Landing page ("Front Door")
 
 **Goal for today**

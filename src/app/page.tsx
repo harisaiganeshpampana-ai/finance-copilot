@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  Activity,
   ArrowRight,
   ArrowDownLeft,
   ArrowUpRight,
@@ -14,6 +13,7 @@ import {
   TrendingDown,
   type LucideIcon,
 } from "lucide-react";
+import { Logo } from "@/components/Logo";
 import { mockTransactions } from "@/data/mockTransactions";
 import { calculateBalanceCents, formatCents } from "@/lib/balance";
 
@@ -46,17 +46,6 @@ const securityPoints: { icon: LucideIcon; title: string; body: string }[] = [
   { icon: KeyRound, title: "Secrets stay server-side", body: "Keys and tokens never reach the browser." },
   { icon: ServerCog, title: "Validated on the server", body: "Every request is checked before it is processed." },
 ];
-
-function Logo() {
-  return (
-    <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight text-white">
-      <span className="grid size-7 place-items-center rounded-md bg-white text-zinc-950">
-        <Activity className="size-4" strokeWidth={2.5} aria-hidden="true" />
-      </span>
-      MoneyPulse
-    </Link>
-  );
-}
 
 function NavBar() {
   return (
