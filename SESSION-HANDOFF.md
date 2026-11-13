@@ -34,6 +34,34 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-13 — Day 7: Connect Bank UI (demo)
+
+**Goal for today**
+- UI for connecting a bank account. No real provider (Plaid) yet.
+
+**What got done**
+- Sidebar "Demo mode" note replaced with a primary **Connect Bank** button (also in the phone menu).
+- Modal "Connect your bank securely" explains safety: bank-grade encryption, read-only access, login stays private, disconnect anytime. Buttons: "Continue to Secure Login" and Cancel. Closes with Escape, the X, or clicking outside; keyboard focus stays inside while open. A small line says no real connection is made yet.
+- "Continue to Secure Login" closes the modal and shows the toast "Bank connected successfully (Demo)".
+- When connected: sidebar shows "Meridian Bank" (fictional) with a green **Synced** badge and "Checking •••• 4821", plus a Disconnect button. The header pill changes from "Demo data" to a green **Live Data**.
+- Connection state is app-wide and remembered in the browser (`src/components/bank/bank-store.tsx`).
+- Tests: `bank-connection.test.tsx` (button, modal content, all ways to close, connect, toast, badge, pill, disconnect, no emojis). 68 tests total.
+
+**What's in progress (not finished)**
+- Nothing.
+
+**Blockers / decisions needed**
+- IMPORTANT: after a demo "connection" the pill says "Live Data" but the numbers are still mock data. Before any real user sees this, "Live Data" must only appear when real bank data is actually loaded.
+- The modal's safety promises (encryption at rest, read-only, password never seen) must be true of the real integration (e.g. Plaid) before launch.
+- Real integration needs: a Plaid (or similar) account, server-side token exchange, secrets kept server-only, and storing access tokens securely.
+
+**Tests**
+- [x] `npm test` passes (68)
+- [x] `npm run build` passes
+
+**Next steps (for the next session)**
+1. Real bank connection via Plaid sandbox, or wire the AI Copilot.
+
 ### 2026-11-13 — Day 6: Settings page
 
 **Goal for today**

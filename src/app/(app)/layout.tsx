@@ -1,6 +1,7 @@
 import { Menu, UserRound } from "lucide-react";
 import { Toaster } from "sonner";
 import { Logo } from "@/components/Logo";
+import { BankConnectionCard, DataSourcePill } from "@/components/bank/BankConnection";
 import { CurrencySelector } from "@/components/currency/CurrencySelector";
 import { NavLinks } from "@/components/dashboard/nav";
 import { mockUser } from "@/data/mockUser";
@@ -17,11 +18,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 p-3" aria-label="Dashboard">
           <NavLinks />
         </nav>
-        <div className="m-3 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-          <p className="text-xs font-medium text-zinc-300">Demo mode</p>
-          <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-            Showing sample data. No bank account is connected.
-          </p>
+        <div className="p-3" data-testid="sidebar-bank">
+          <BankConnectionCard />
         </div>
       </aside>
 
@@ -43,6 +41,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   aria-label="Dashboard mobile"
                 >
                   <NavLinks />
+                  <div className="mt-2 border-t border-zinc-800 pt-2">
+                    <BankConnectionCard />
+                  </div>
                 </nav>
               </details>
               <div className="min-w-0">
@@ -56,9 +57,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-              <span className="hidden rounded-full border border-zinc-800 px-2.5 py-1 text-xs text-zinc-400 md:inline">
-                Demo data
-              </span>
+              <DataSourcePill />
               <CurrencySelector />
               <button
                 type="button"
