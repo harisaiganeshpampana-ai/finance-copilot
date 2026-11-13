@@ -13,8 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MoneyPulse (Working Title)",
-  description: "Cash-flow and debt prioritization assistant.",
+  title: {
+    default: "MoneyPulse — Cash flow and debt, under control",
+    template: "%s · MoneyPulse",
+  },
+  description:
+    "MoneyPulse shows where your money goes, what's coming up, and which debt to pay down first.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

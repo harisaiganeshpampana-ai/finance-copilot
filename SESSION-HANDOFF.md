@@ -34,6 +34,37 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-13 — Day 3: Landing page ("Front Door")
+
+**Goal for today**
+- Professional landing page at `/`; move the dashboard to `/dashboard`. AI integration paused.
+
+**What got done**
+- Dashboard (balance + transactions, USD and INR) moved to `/dashboard`.
+- New dark landing page at `/` (`src/app/page.tsx`): nav bar (MoneyPulse, Features, Security, Login, Get Started), hero with headline and "Open the dashboard" button, live product preview using the mock data, 3 feature cards, Security section, call-to-action band, and footer with a "no investment advice" notice.
+- Icons from `lucide-react`. No emojis; a test enforces this.
+- Mobile-friendly: on phones the nav collapses into a menu button. Checked at 375px wide with no sideways scrolling.
+- Site font switched to Geist (was falling back to Arial). Browser tab titles: "MoneyPulse — Cash flow and debt, under control" and "Dashboard · MoneyPulse".
+- Tests: `landing.test.tsx` (headline, nav, dashboard link, feature cards, sections, footer, no emojis) and `dashboard.test.tsx`. 22 tests total.
+
+**What's in progress (not finished)**
+- Nothing.
+
+**Blockers / decisions needed**
+- "Login" and "Get Started" both go to `/dashboard` for now; there is no sign-up/login yet.
+- The landing page copy promises things not built yet (read-only bank connections, encryption at rest, AI copilot, avalanche/snowball debt payoff). Each must be true before public launch, or the copy changed.
+- Copyright year is fixed at 2026 in the footer (this Next.js version doesn't allow reading the current date while pre-building the page). Update it each year.
+
+**Tests**
+- [x] `npm test` passes (22)
+- [x] `npm run build` passes
+
+**Next steps (for the next session)**
+1. Decide: real login/sign-up next, or resume AI integration.
+
+**Notes**
+- New packages: `lucide-react` (icons), `@testing-library/react` + `jsdom` (page render tests).
+
 ### 2026-11-13 — Day 2: Mock transactions page
 
 **Goal for today**
