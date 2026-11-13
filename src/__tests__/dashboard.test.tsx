@@ -1,18 +1,15 @@
 // @vitest-environment jsdom
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import DashboardLayout from "@/app/dashboard/layout";
-import Dashboard from "@/app/dashboard/page";
+import { installBrowserStubs } from "./test-setup";
+
+vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard" }));
+
+import DashboardLayout from "@/app/(app)/layout";
+import Dashboard from "@/app/(app)/dashboard/page";
 import { resetCurrencyForTests } from "@/components/currency/currency-store";
 
-beforeAll(() => {
-  // The chart measures its container; jsdom doesn't provide ResizeObserver.
-  globalThis.ResizeObserver ??= class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-});
+beforeAll(installBrowserStubs);
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -39,10 +36,12 @@ describe("Dashboard (/dashboard)", () => {
   it("shows the sidebar navigation", () => {
     renderDashboard();
     const nav = screen.getByRole("navigation", { name: "Dashboard" });
-    for (const name of ["Overview", "Transactions", "AI Copilot"]) {
+    for (const name of ["Overview", "Transactions", "AI Copilot", "Settings"]) {
       expect(within(nav).getByRole("link", { name })).toBeTruthy();
     }
-    expect(within(nav).getByText("Settings")).toBeTruthy();
+    expect(within(nav).getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBe("page");
+    expect(within(nav).getByRole("link", { name: "Settings" }).getAttribute("href")).toBe("/settings");
+    expect(within(nav).getByRole("link", { name: "Settings" }).getAttribute("aria-current")).toBeNull();
     expect(screen.getByRole("link", { name: "MoneyPulse" }).getAttribute("href")).toBe("/");
   });
 

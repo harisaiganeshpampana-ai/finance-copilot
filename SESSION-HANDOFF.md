@@ -34,6 +34,42 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-13 — Day 6: Settings page
+
+**Goal for today**
+- Premium `/settings` page with profile, preferences, notifications, danger zone and a save flow.
+
+**What got done**
+- `/dashboard` and `/settings` now share one app frame (sidebar + top bar) in `src/app/(app)/layout.tsx`. URLs are unchanged.
+- Sidebar highlights the current page (Settings on `/settings`, Overview on `/dashboard`). Transactions and AI Copilot link to sections on the dashboard.
+- Settings page (`src/app/(app)/settings/`):
+  - Profile: Full Name, Email Address, profile picture placeholder (initials) with Upload. Upload shows a local preview only; it checks type (PNG/JPG/GIF/WebP) and size (max 2 MB). Nothing is uploaded.
+  - Preferences: Base Currency (linked to the global currency; the top bar updates too) and a Dark Mode toggle (visual only; turning it off says light theme is coming soon).
+  - Notifications: Weekly Summary, Large Transaction Alerts, AI Copilot Tips toggles.
+  - Danger Zone: red Delete Account button. In demo mode it only shows a message; nothing is deleted.
+  - Sticky Save bar with "unsaved changes" indicator. Save calls a server action that validates on the server (`src/lib/validation/settings.ts`) and shows a success or error toast (`sonner`). Field errors appear inline.
+- Custom toggle switch component (`src/components/ui/Switch.tsx`), accessible as role="switch".
+- Tests: validation rules, server action, sidebar highlighting, every settings control, save success/error toasts, upload checks. 62 tests total.
+
+**What's in progress (not finished)**
+- Nothing.
+
+**Blockers / decisions needed**
+- Settings aren't stored anywhere yet (no database or accounts). The server validates and confirms, then the values reset on reload. Persisting needs accounts + a database.
+- Profile picture upload, dark-mode switching and account deletion are placeholders.
+- Mock email is `hari@example.com` (`src/data/mockUser.ts`).
+
+**Tests**
+- [x] `npm test` passes (62)
+- [x] `npm run build` passes
+
+**Next steps (for the next session)**
+1. Wire the Copilot to the AI through a server route, or add real accounts so settings can be saved.
+
+**Notes**
+- New package: `sonner` (toasts).
+- On this Windows machine, PowerShell blocks `npm` scripts (execution policy). In the Terminal use `npm.cmd run dev` / `npm.cmd test` instead of `npm ...`.
+
 ### 2026-11-13 — Day 5: Multi-currency
 
 **Goal for today**

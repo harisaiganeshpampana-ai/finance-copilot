@@ -2,4 +2,5 @@
 export const mockUser = {
   firstName: "Hari",
   fullName: "Pampana Hari Sai Ganesh",
+  email: "hari@example.com", // placeholder until real accounts exist
 };

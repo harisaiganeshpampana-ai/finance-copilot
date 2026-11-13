@@ -1,10 +1,12 @@
 import { Menu, UserRound } from "lucide-react";
+import { Toaster } from "sonner";
 import { Logo } from "@/components/Logo";
 import { CurrencySelector } from "@/components/currency/CurrencySelector";
 import { NavLinks } from "@/components/dashboard/nav";
 import { mockUser } from "@/data/mockUser";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+// Shared app frame (sidebar + top bar) for /dashboard and /settings.
+export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-full flex-1 bg-zinc-950 text-zinc-100 antialiased">
       {/* Sidebar (desktop) */}
@@ -72,6 +74,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {children}
       </div>
+
+      {/* Top-right, below the header, so toasts never cover the Save bar */}
+      <Toaster theme="dark" position="top-right" offset={{ top: 76, right: 24 }}
+        mobileOffset={{ top: 72, right: 16, left: 16 }}
+        toastOptions={{ className: "font-sans" }} />
     </div>
   );
 }
