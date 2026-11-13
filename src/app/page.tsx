@@ -1,5 +1,13 @@
 import { mockTransactions } from "@/data/mockTransactions";
-import { calculateBalanceCents, formatCents } from "@/lib/balance";
+import {
+  calculateBalanceCents,
+  formatCents,
+  formatInrPaise,
+  USD_TO_INR_DEMO_RATE,
+  usdCentsToInrPaise,
+} from "@/lib/balance";
+
+const inr = (cents: number) => formatInrPaise(usdCentsToInrPaise(cents));
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -31,7 +39,13 @@ export default function Home() {
           <p className="mt-1 text-4xl font-semibold tracking-tight tabular-nums" data-testid="balance">
             {formatCents(balanceCents)}
           </p>
-          <p className="mt-2 text-xs text-indigo-200">Based on {transactions.length} mock transactions</p>
+          <p className="mt-1 text-lg font-medium text-indigo-100 tabular-nums" data-testid="balance-inr">
+            ≈ {inr(balanceCents)}
+          </p>
+          <p className="mt-2 text-xs text-indigo-200">
+            Based on {transactions.length} mock transactions · ₹ at a fixed demo rate of ₹{USD_TO_INR_DEMO_RATE} = $1
+            (not live)
+          </p>
         </section>
 
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -49,14 +63,20 @@ export default function Home() {
                       {dateFormatter.format(new Date(t.date))}
                     </p>
                   </div>
-                  <p
-                    className={`shrink-0 font-semibold tabular-nums ${
-                      isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-slate-900 dark:text-slate-100"
-                    }`}
-                  >
-                    {isIncome ? "+" : ""}
-                    {formatCents(t.amountCents)}
-                  </p>
+                  <div className="shrink-0 text-right tabular-nums">
+                    <p
+                      className={`font-semibold ${
+                        isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-slate-900 dark:text-slate-100"
+                      }`}
+                    >
+                      {isIncome ? "+" : ""}
+                      {formatCents(t.amountCents)}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {isIncome ? "+" : ""}
+                      {inr(t.amountCents)}
+                    </p>
+                  </div>
                 </li>
               );
             })}

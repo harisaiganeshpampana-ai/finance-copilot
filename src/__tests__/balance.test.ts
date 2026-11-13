@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { mockTransactions, type Transaction } from "@/data/mockTransactions";
-import { calculateBalanceCents, formatCents } from "@/lib/balance";
+import {
+  calculateBalanceCents,
+  formatCents,
+  formatInrPaise,
+  USD_TO_INR_DEMO_RATE,
+  usdCentsToInrPaise,
+} from "@/lib/balance";
 
 const tx = (id: string, amountCents: number): Transaction => ({
   id,
@@ -42,5 +48,39 @@ describe("formatCents", () => {
     expect(formatCents(208254)).toBe("$2,082.54");
     expect(formatCents(-1549)).toBe("-$15.49");
     expect(formatCents(0)).toBe("$0.00");
+  });
+});
+
+describe("usdCentsToInrPaise", () => {
+  it("uses the demo rate of ₹88 per $1 by default", () => {
+    expect(USD_TO_INR_DEMO_RATE).toBe(88);
+    expect(usdCentsToInrPaise(100)).toBe(8800); // $1.00 -> ₹88.00
+  });
+
+  it("converts the mock balance ($2,082.54 -> ₹1,83,263.52)", () => {
+    expect(usdCentsToInrPaise(calculateBalanceCents(mockTransactions))).toBe(18326352);
+  });
+
+  it("converts negative amounts", () => {
+    expect(usdCentsToInrPaise(-1549)).toBe(-136312);
+  });
+
+  it("rounds to the nearest paisa with fractional rates", () => {
+    expect(usdCentsToInrPaise(1, 83.4)).toBe(83);
+    expect(usdCentsToInrPaise(1, 83.6)).toBe(84);
+  });
+
+  it("rejects invalid rates", () => {
+    expect(() => usdCentsToInrPaise(100, 0)).toThrow();
+    expect(() => usdCentsToInrPaise(100, -5)).toThrow();
+    expect(() => usdCentsToInrPaise(100, Number.NaN)).toThrow();
+  });
+});
+
+describe("formatInrPaise", () => {
+  it("formats rupees with Indian digit grouping (lakhs)", () => {
+    expect(formatInrPaise(18326352)).toBe("₹1,83,263.52");
+    expect(formatInrPaise(-136312)).toBe("-₹1,363.12");
+    expect(formatInrPaise(0)).toBe("₹0.00");
   });
 });

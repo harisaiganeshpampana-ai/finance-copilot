@@ -47,12 +47,14 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 - Mock data lives in `src/data/mockTransactions.ts`. No bank connection.
 - Balance logic in `src/lib/balance.ts`. Money is stored in whole cents to avoid rounding errors; bad amounts are rejected.
 - Tests in `src/__tests__/balance.test.ts` check the math, including negatives, rounding, bad data, and the mock total ($2,082.54).
+- Added Indian rupees: the balance and every transaction now also show an INR amount (Indian digit grouping, e.g. ₹1,83,263.52), with tests.
 
 **What's in progress (not finished)**
 - Nothing.
 
 **Blockers / decisions needed**
-- Currency is US dollars for now (one setting in `src/lib/balance.ts`). Confirm the target market/currency.
+- INR uses a FIXED DEMO RATE of ₹88 = $1 (`USD_TO_INR_DEMO_RATE` in `src/lib/balance.ts`), not a live rate. Before real use: fetch a live rate server-side, or store transactions in INR directly if the product is India-first.
+- Confirm the primary currency (USD, INR, or both).
 
 **Tests**
 - [x] `npm test` passes
