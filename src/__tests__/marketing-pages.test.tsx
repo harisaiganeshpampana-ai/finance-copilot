@@ -78,10 +78,10 @@ describe("/pricing", () => {
     expect((await screen.findAllByText("Checkout coming soon")).length).toBeGreaterThan(0);
   });
 
-  it("the free plan links to the dashboard", () => {
+  it("the free plan links to sign-up", () => {
     render(<PricingPage />);
     const basic = screen.getByRole("article", { name: "Basic" });
-    expect(within(basic).getByRole("link", { name: "Get started" }).getAttribute("href")).toBe("/dashboard");
+    expect(within(basic).getByRole("link", { name: "Get started" }).getAttribute("href")).toBe("/signup");
   });
 });
 

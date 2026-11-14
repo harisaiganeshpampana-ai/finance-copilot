@@ -1,3 +1,4 @@
+import { getCurrentUser } from "@/lib/auth/session";
 import {
   AllProvidersFailedError,
   askWithFallback,
@@ -11,7 +12,13 @@ import {
 export const maxDuration = 60;
 
 // POST /api/chat — the AI Copilot. Runs only on the server; API keys never leave it.
+// Requires a logged-in user, so the AI (and its cost) can't be used anonymously.
 export async function POST(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return Response.json({ error: "Please log in to use the Copilot." }, { status: 401 });
+  }
+
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   if (isRateLimited(ip)) {
     return Response.json({ error: "Too many questions. Please wait a minute and try again." }, { status: 429 });

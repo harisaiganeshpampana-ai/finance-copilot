@@ -48,7 +48,7 @@ describe("Dashboard (/dashboard)", () => {
   it("greets the user and shows an account avatar", () => {
     renderDashboard();
     expect(screen.getByRole("heading", { level: 1, name: "Welcome back, Hari" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /account/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Account settings" }).getAttribute("href")).toBe("/settings");
   });
 
   it("shows three stat cards with the right figures", () => {

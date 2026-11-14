@@ -24,11 +24,11 @@ export function SiteHeader() {
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Link href="/dashboard" className="px-3 py-2 text-sm text-zinc-400 transition-colors hover:text-white">
+          <Link href="/login" className="px-3 py-2 text-sm text-zinc-400 transition-colors hover:text-white">
             Login
           </Link>
           <Link
-            href="/dashboard"
+            href="/signup"
             className="rounded-md bg-white px-4 py-2 text-sm font-medium text-zinc-950 transition-colors hover:bg-zinc-200"
           >
             Get Started
@@ -49,11 +49,11 @@ export function SiteHeader() {
                 {l.label}
               </Link>
             ))}
-            <Link href="/dashboard" className="block rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800">
+            <Link href="/login" className="block rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800">
               Login
             </Link>
             <Link
-              href="/dashboard"
+              href="/signup"
               className="mt-1 block rounded-md bg-white px-3 py-2 text-center text-sm font-medium text-zinc-950"
             >
               Get Started

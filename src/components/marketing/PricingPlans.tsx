@@ -28,7 +28,7 @@ export const PLANS: Plan[] = [
     price: { USD: "$0", INR: "₹0" },
     period: "Free forever",
     features: ["Basic AI Copilot chat", "1 connected bank account", "Balance, income and spending dashboard", "Multi-currency view"],
-    cta: { label: "Get started", kind: "link", href: "/dashboard" },
+    cta: { label: "Get started", kind: "link", href: "/signup" },
   },
   {
     id: "pro",

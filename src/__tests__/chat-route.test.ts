@@ -1,4 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const sessionMock = vi.hoisted(() => ({
+  getCurrentUser: vi.fn<() => Promise<{ name?: string; email?: string } | null>>(),
+}));
+vi.mock("@/lib/auth/session", () => sessionMock);
+
 import { POST } from "@/app/api/chat/route";
 import { getProviders, MAX_REQUESTS_PER_WINDOW, resetRateLimitForTests } from "@/lib/server/copilot";
 
@@ -41,6 +47,7 @@ const setKeys = (keys: { gemini?: string; openai?: string; deepseek?: string }) 
 };
 
 beforeEach(() => {
+  sessionMock.getCurrentUser.mockResolvedValue({ name: "Hari", email: "hari@example.com" });
   resetRateLimitForTests();
   setKeys({ gemini: GEMINI_KEY, openai: OPENAI_KEY, deepseek: DEEPSEEK_KEY });
   fetchMock = vi.fn(async () => aiResponse("Yes. You have about $14,900, so a $300 phone is affordable."));
@@ -74,6 +81,14 @@ describe("provider order", () => {
 });
 
 describe("POST /api/chat", () => {
+  it("rejects requests without a login (401) and never calls the AI", async () => {
+    sessionMock.getCurrentUser.mockResolvedValueOnce(null);
+    const res = await chat({ message: "Can I afford a $300 phone?" });
+    expect(res.status).toBe(401);
+    expect((await res.json()).error).toMatch(/log in/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("answers with Gemini first, using the Gemini key from the server environment", async () => {
     const res = await chat({ message: "Can I afford a $300 phone?" });
     expect(res.status).toBe(200);

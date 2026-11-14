@@ -34,6 +34,39 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 15: User accounts (NextAuth + MongoDB)
+
+**Goal for today**
+- Email/password login with NextAuth, Mongoose and bcryptjs; protect the app.
+
+**What got done**
+- Installed `next-auth@4` (stable; supports Next 16), `mongoose`, `bcryptjs`.
+- `.env.local` created (git-ignored) with `MONGODB_URI=` (empty, to fill) and a generated `NEXTAUTH_SECRET`.
+- `src/lib/server/db.ts`: cached Mongoose connection (no reconnect storm in dev/serverless); clear error if `MONGODB_URI` is missing.
+- `src/models/User.ts`: name, email (unique, lowercase), password (bcrypt hash, hidden from queries by default), timestamps.
+- NextAuth (`src/lib/auth/options.ts`, `/api/auth/[...nextauth]`): Credentials provider, JWT sessions (30 days), custom /login page.
+- Sign-up (`src/app/(auth)/signup/actions.ts` → `src/lib/auth/credentials.ts`): server-side validation (name, email, password 8-72 chars with a letter and a number), duplicate-email check, bcrypt hash (cost 12), never returns the password.
+- Log-in: server-side credential check, same timing for unknown emails, best-effort brute-force limit (10 tries / 15 min per email).
+- `/login` and `/signup` pages in CalmOwe dark style (show/hide password, live password rules, safe redirect back to the requested page).
+- `src/proxy.ts` (Next 16's renamed middleware) protects `/dashboard`, `/copilot` and `/settings`; fails safe to /login if the session can't be read. `/api/chat` now requires login (401), so the AI can't be used anonymously.
+- Sidebar shows the logged-in user and a **Log Out** button (also in the phone menu). Greeting uses the account's first name. Avatar links to Settings. Landing "Login"/"Get Started" and the free plan now go to /login and /signup.
+- Security fix: turned off Next.js dev logging of server-action arguments (it printed the sign-up password).
+- Tests: `auth.test.ts`, `auth-pages.test.tsx`, plus route and secret-safety updates. 216 tests total.
+
+**What's in progress (not finished)**
+- Nothing in code. Waiting on configuration (below).
+
+**Blockers / decisions needed**
+- Add your MongoDB Atlas connection string to `MONGODB_URI` in `.env.local` (for local) AND in Vercel.
+- In Vercel (Settings > Environment Variables, Production): add `MONGODB_URI`, `NEXTAUTH_SECRET` (copy from `.env.local`), and `NEXTAUTH_URL=https://calmowe.com`. Then redeploy. Until then, /dashboard, /copilot and /settings redirect to /login and sign-up shows "not available yet".
+- MongoDB Atlas: allow Vercel to connect (Network Access; Vercel uses dynamic IPs, so 0.0.0.0/0 or the Vercel integration).
+- Settings page still uses placeholder profile data (name/email aren't loaded from the account yet); dashboard data is still mock data.
+- Not built yet: password reset, email verification.
+
+**Tests**
+- [x] `npm test` passes (216)
+- [x] `npm run build` passes
+
 ### 2026-11-14 — Day 14b: Pricing inside Settings
 
 **What got done**
