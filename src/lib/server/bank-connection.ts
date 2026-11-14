@@ -17,6 +17,13 @@ export type PublicBankConnection = {
 
 export type StoredBankConnection = PublicBankConnection & { accessTokenEncrypted: string; itemId: string };
 
+/**
+ * Projection for reading a user's connection including the (normally hidden) encrypted token.
+ * Only "+field": that adds the hidden field to all the normal ones. Combining it with "plaid"
+ * makes MongoDB reject the query ("Path collision at plaid.accessTokenEncrypted").
+ */
+export const PLAID_TOKEN_SELECT = "+plaid.accessTokenEncrypted";
+
 export type BankConnectionStore = {
   save(userId: string, connection: StoredBankConnection): Promise<void>;
   get(userId: string): Promise<StoredBankConnection | null>;
@@ -51,7 +58,7 @@ async function defaultStore(): Promise<BankConnectionStore> {
     },
     async get(userId) {
       await connectToDatabase();
-      const doc = await User.findById(userId).select("+plaid.accessTokenEncrypted plaid").lean();
+      const doc = await User.findById(userId).select(PLAID_TOKEN_SELECT).lean();
       const p = doc?.plaid;
       if (!p?.accessTokenEncrypted || !p.itemId) return null;
       return {

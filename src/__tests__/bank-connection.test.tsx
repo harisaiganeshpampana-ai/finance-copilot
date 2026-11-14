@@ -29,6 +29,7 @@ vi.mock("react-plaid-link", () => ({
   },
 }));
 
+import { useSession } from "next-auth/react";
 import { disconnectBank, getBankConnectionStatus } from "@/app/(app)/bank-actions";
 import AppLayout from "@/app/(app)/layout";
 import { resetBankForTests } from "@/components/bank/bank-store";
@@ -176,6 +177,58 @@ describe("saved connection (MongoDB)", () => {
     expect(disconnectBank).toHaveBeenCalled();
     expect(sidebar().getByRole("button", { name: "Connect Bank" })).toBeTruthy();
     expect(screen.getByTestId("data-source-pill").textContent).toBe("Demo data");
+  });
+});
+
+describe("connections are per account (regression)", () => {
+  const asUser = (email: string, name = "User") =>
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "x", name, email }, expires: "2099-01-01" },
+      status: "authenticated",
+      update: vi.fn(),
+    } as unknown as ReturnType<typeof useSession>);
+  afterEach(() => asUser("hari@example.com", "Hari Sai Ganesh"));
+
+  it("one account's bank never shows for another account on the same browser", async () => {
+    asUser("hari@example.com");
+    respond({ mode: "demo" });
+    const { unmount } = renderApp();
+    openModal();
+    await clickConnect();
+    await sidebar().findByText("Meridian Bank", undefined, { timeout: 3000 });
+    expect(window.localStorage.getItem("calmowe.bankConnection:hari@example.com")).toContain("Meridian Bank");
+    unmount();
+
+    // A brand-new account logs in on the same browser.
+    asUser("new-user@example.com");
+    renderApp();
+    await waitFor(() => expect(sidebar().getByRole("button", { name: "Connect Bank" })).toBeTruthy());
+    expect(sidebar().queryByText("Meridian Bank")).toBeNull();
+    expect(screen.getByTestId("data-source-pill").textContent).toBe("Demo data");
+  });
+
+  it("clears a stale Plaid connection when the server says this user has none", async () => {
+    window.localStorage.setItem(
+      "calmowe.bankConnection:hari@example.com",
+      JSON.stringify({ name: "Tartan Bank", account: "Plaid Checking", last4: "0000", mode: "sandbox" }),
+    );
+    vi.mocked(getBankConnectionStatus).mockResolvedValue(null);
+    renderApp();
+    await waitFor(() => expect(sidebar().getByRole("button", { name: "Connect Bank" })).toBeTruthy());
+    expect(sidebar().queryByText("Tartan Bank")).toBeNull();
+    expect(window.localStorage.getItem("calmowe.bankConnection:hari@example.com")).toBeNull();
+  });
+
+  it("ignores and removes the old shared (pre-fix) browser entries", async () => {
+    window.localStorage.setItem(
+      "calmowe.bankConnection",
+      JSON.stringify({ name: "Tartan Bank", account: "Plaid Checking", last4: "0000", mode: "sandbox" }),
+    );
+    window.localStorage.setItem("calmowe.bankConnected", "true");
+    renderApp();
+    await waitFor(() => expect(window.localStorage.getItem("calmowe.bankConnection")).toBeNull());
+    expect(window.localStorage.getItem("calmowe.bankConnected")).toBeNull();
+    expect(sidebar().queryByText("Tartan Bank")).toBeNull();
   });
 });
 

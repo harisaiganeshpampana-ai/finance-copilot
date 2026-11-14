@@ -34,6 +34,16 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 19b: Fix bank connection leaking between accounts
+
+**Bug (reported)**: a connected bank (Tartan Bank, Sandbox) showed for every account, including new ones; Disconnect said "Couldn't disconnect".
+
+**Causes and fixes**
+1. The browser copy of the connection used one shared localStorage key for everyone on that browser. Now stored per account (`calmowe.bankConnection:<email>`, `setBankScope`); old shared keys are deleted.
+2. The server sync compared against a stale value captured at first render, so it never cleared another account's bank. It now reads fresh (`readBankConnection`).
+3. Reading a saved connection from MongoDB used a conflicting projection (`"+plaid.accessTokenEncrypted plaid"`), which MongoDB rejects ("Path collision"). That broke status and disconnect for everyone. Now `PLAID_TOKEN_SELECT = "+plaid.accessTokenEncrypted"`.
+- Regression tests: two accounts on one browser, stale connection cleared, legacy keys removed, projection check. 309 tests total.
+
 ### 2026-11-14 — Day 19: Real Plaid connection (Sandbox) with token exchange
 
 **What got done**

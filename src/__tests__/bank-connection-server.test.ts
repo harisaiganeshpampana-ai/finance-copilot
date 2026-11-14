@@ -5,6 +5,7 @@ import {
   disconnectBankForUser,
   getBankConnection,
   parseExchangeRequest,
+  PLAID_TOKEN_SELECT,
   type StoredBankConnection,
 } from "@/lib/server/bank-connection";
 import { decryptSecret, encryptSecret, encryptionKey, EncryptionKeyMissingError } from "@/lib/server/crypto";
@@ -70,6 +71,14 @@ describe("encryption (AES-256-GCM)", () => {
     vi.stubEnv("ENCRYPTION_KEY", "");
     vi.stubEnv("NEXTAUTH_SECRET", "");
     expect(() => encryptionKey()).toThrow(EncryptionKeyMissingError);
+  });
+});
+
+describe("reading the connection from MongoDB (regression)", () => {
+  it("selects the hidden token with '+' only, avoiding MongoDB's path-collision error", () => {
+    expect(PLAID_TOKEN_SELECT).toBe("+plaid.accessTokenEncrypted");
+    // "plaid" together with "+plaid.accessTokenEncrypted" makes MongoDB reject the query.
+    expect(PLAID_TOKEN_SELECT.split(/\s+/)).not.toContain("plaid");
   });
 });
 

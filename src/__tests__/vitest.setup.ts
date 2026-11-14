@@ -12,7 +12,8 @@ vi.mock("@/app/(app)/bank-actions", () => ({
 
 vi.mock("next-auth/react", () => ({
   SessionProvider: ({ children }: { children: unknown }) => children,
-  useSession: () => ({ data: { user: TEST_SESSION_USER, expires: "2099-01-01" }, status: "authenticated" }),
+  // vi.fn so a test can switch the logged-in user with vi.mocked(useSession).mockReturnValue(...)
+  useSession: vi.fn(() => ({ data: { user: TEST_SESSION_USER, expires: "2099-01-01" }, status: "authenticated" })),
   signIn: vi.fn(async () => ({ ok: true, error: null, status: 200, url: "/dashboard" })),
   signOut: vi.fn(async () => undefined),
 }));

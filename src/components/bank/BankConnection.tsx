@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Landmark, Plus, Unlink } from "lucide-react";
 import { toast } from "sonner";
+import { useSession } from "next-auth/react";
 import { disconnectBank, getBankConnectionStatus } from "@/app/(app)/bank-actions";
-import { type ConnectionMode, useBankConnection } from "./bank-store";
+import { type ConnectionMode, readBankConnection, setBankScope, useBankConnection } from "./bank-store";
 import { ConnectBankModal } from "./ConnectBankModal";
 
 const modeLabel = (mode: ConnectionMode) => (mode === "sandbox" ? "Sandbox" : mode === "demo" ? "Demo" : null);
@@ -15,23 +16,31 @@ export function BankConnectionCard() {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
 
-  // The user's real (Plaid) connection lives in MongoDB: sync it on load so it shows on
-  // every device. Simulated "demo" connections are browser-only and left alone.
+  // Scope the stored connection to the logged-in account, then sync this user's real (Plaid)
+  // connection from MongoDB so it shows on every device and never leaks between accounts.
+  // Simulated "demo" connections are browser-only (per account) and left alone.
+  const { data: session } = useSession();
+  const email = session?.user?.email ?? null;
   useEffect(() => {
+    setBankScope(email);
+    if (!email) return;
     let cancelled = false;
     getBankConnectionStatus()
       .then((server) => {
         if (cancelled) return;
-        if (server) connect({ name: server.name, account: server.account, last4: server.last4, mode: server.mode });
-        else if (bank && bank.mode !== "demo") disconnect();
+        if (server) {
+          connect({ name: server.name, account: server.account, last4: server.last4, mode: server.mode });
+          return;
+        }
+        // Read fresh (not the value captured when this effect started).
+        const current = readBankConnection();
+        if (current && current.mode !== "demo") disconnect();
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-    // Run once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [email, connect, disconnect]);
 
   const label = bank ? modeLabel(bank.mode) : null;
 
