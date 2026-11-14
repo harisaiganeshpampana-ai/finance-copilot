@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MOCK_AS_OF, mockTransactions, type Transaction } from "@/data/mockTransactions";
 import { addOneMonth, estimateUpcomingBills } from "@/lib/insights";
 import {
+  affordabilityNotes,
   buildFinancialContext,
   buildSystemPrompt,
   buildUserPrompt,
@@ -116,16 +117,54 @@ describe("buildSystemPrompt", () => {
 
 describe("buildUserPrompt", () => {
   it("injects the JSON data before the question", () => {
-    const prompt = buildUserPrompt("Can I afford a $300 phone?", "USD");
+    const prompt = buildUserPrompt("How can I spend less on dining?", "USD");
     const match = prompt.match(/^Here is my current financial data:\n([\s\S]+)\n\nMy question is: (.+)$/);
     expect(match).not.toBeNull();
     expect(JSON.parse(match![1])).toEqual(buildFinancialContext());
-    expect(match![2]).toBe("Can I afford a $300 phone?");
+    expect(match![2]).toBe("How can I spend less on dining?");
   });
 
-  it("appends exact conversions for foreign-currency amounts", () => {
+  it("appends exact conversions and affordability math for foreign-currency amounts", () => {
     const prompt = buildUserPrompt("Can I afford a ₹5,000 purchase?", "USD");
     expect(prompt).toContain("My question is: Can I afford a ₹5,000 purchase?");
+    expect(prompt).toContain("[Exact figures computed by CalmOwe; use these exactly and do not recalculate:");
     expect(prompt).toContain('"₹5,000" means ₹5,000.00 (INR) = $59.88 USD.');
+    expect(prompt).toContain("minus cost = $14,862.66");
+  });
+
+  it("adds nothing extra when the question has no amounts", () => {
+    expect(buildUserPrompt("Review my spending this week", "USD").endsWith("My question is: Review my spending this week")).toBe(
+      true,
+    );
+  });
+});
+
+describe("affordabilityNotes (server-side math)", () => {
+  it("computes balance minus cost, then minus upcoming expenses ($2,000 laptop)", () => {
+    expect(affordabilityNotes("Can I afford a $2,000 laptop?", "USD")).toEqual([
+      "If spending $2,000 ($2,000.00): current balance $14,922.54 minus cost = $12,922.54; then minus upcoming expenses $1,577.89 = $11,344.65.",
+    ]);
+  });
+
+  it("converts rupee amounts before subtracting (₹5,000 = $59.88)", () => {
+    expect(affordabilityNotes("Can I afford a ₹5,000 purchase?", "USD")).toEqual([
+      "If spending ₹5,000 ($59.88): current balance $14,922.54 minus cost = $14,862.66; then minus upcoming expenses $1,577.89 = $13,284.77.",
+    ]);
+  });
+
+  it("does the math in the user's display currency without rounding drift", () => {
+    expect(affordabilityNotes("Can I afford a ₹5,000 purchase?", "INR")).toEqual([
+      "If spending ₹5,000 (₹5,000.00): current balance ₹12,46,032.09 minus cost = ₹12,41,032.09; then minus upcoming expenses ₹1,31,753.82 = ₹11,09,278.27.",
+    ]);
+  });
+
+  it("flags purchases that aren't affordable after upcoming expenses", () => {
+    expect(affordabilityNotes("Can I buy a $14,000 car?", "USD")[0]).toBe(
+      "If spending $14,000 ($14,000.00): current balance $14,922.54 minus cost = $922.54; then minus upcoming expenses $1,577.89 = -$655.35 (NOT affordable after upcoming expenses).",
+    );
+  });
+
+  it("returns nothing for questions without amounts", () => {
+    expect(affordabilityNotes("How do I pay off my debt faster?", "USD")).toEqual([]);
   });
 });

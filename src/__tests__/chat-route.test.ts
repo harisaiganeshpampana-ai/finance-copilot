@@ -83,7 +83,9 @@ describe("POST /api/chat", () => {
     expect(sentBody().model).toBe("gemini-2.5-flash");
     expect(sentBody().reasoning_effort).toBe("none");
     expect(sentBody().messages.at(-1).role).toBe("user");
-    expect(sentBody().messages.at(-1).content.endsWith("My question is: Can I afford a $300 phone?")).toBe(true);
+    const userTurn: string = sentBody().messages.at(-1).content;
+    expect(userTurn).toContain("My question is: Can I afford a $300 phone?");
+    expect(userTurn).toContain("minus cost = $14,622.54; then minus upcoming expenses $1,577.89 = $13,044.65.");
   });
 
   it("falls back to OpenAI (gpt-4o-mini) when Gemini fails", async () => {
@@ -160,7 +162,7 @@ describe("POST /api/chat", () => {
     await chat({ message: "Review my spending this week" });
     const userTurn: string = sentBody().messages.at(-1).content;
     expect(userTurn.endsWith("My question is: Review my spending this week")).toBe(true);
-    expect(userTurn).not.toContain("Exact currency conversions");
+    expect(userTurn).not.toContain("Exact figures");
   });
 
   it("passes valid conversation history", async () => {

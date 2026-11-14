@@ -7,8 +7,8 @@ import {
   MOCK_OPENING_BALANCE_CENTS,
   mockTransactions,
 } from "@/data/mockTransactions";
-import { type CurrencyCode, isCurrencyCode } from "@/lib/currency";
-import { currencyHints } from "@/lib/currency-hints";
+import { convertUsdCents, type CurrencyCode, formatMinorUnits, isCurrencyCode } from "@/lib/currency";
+import { convertAmount, currencyHints, findAmounts } from "@/lib/currency-hints";
 import { dailySpending, estimateUpcomingBills, monthTotals, totalBalanceCents } from "@/lib/insights";
 
 // ---------- Provider config ----------
@@ -164,7 +164,8 @@ export function buildSystemPrompt(currency: CurrencyCode): string {
     "Do not provide investment advice. Do not recommend buying, selling, or holding any stock, fund, ETF, bond, crypto, or other security, or suggest where to invest. If asked, briefly say you only help with cash flow and debt, then offer a related cash-flow or debt answer.",
     "You are not a licensed financial advisor; for major decisions, suggest consulting one.",
     `Show money amounts in ${currency}. All amounts in the data are USD; convert at 1 USD = ${rate} ${currency} (fixed demo rate).`,
-    "Read currency symbols carefully: ₹ or Rs means Indian rupees (INR), $ means US dollars, € means euros, £ means pounds. Never treat a rupee amount as dollars. When the message includes 'Exact currency conversions computed by CalmOwe', use those figures exactly.",
+    "Read currency symbols carefully: ₹ or Rs means Indian rupees (INR), $ means US dollars, € means euros, £ means pounds. Never treat a rupee amount as dollars.",
+    "When the message includes 'Exact figures computed by CalmOwe', use those figures exactly. Do not do your own arithmetic on them.",
     `If the user mentions an amount in another currency, convert it with these fixed demo rates: 1 USD = ${MOCK_EXCHANGE_RATES.INR} INR = ${MOCK_EXCHANGE_RATES.EUR} EUR = ${MOCK_EXCHANGE_RATES.GBP} GBP.`,
     "Format amounts with thousands separators and the currency symbol (e.g. $14,922.54 or ₹12,46,032.09 using Indian grouping for INR).",
     "Reply in plain text without markdown, in under 150 words. Be specific and use the user's actual numbers.",
@@ -173,14 +174,39 @@ export function buildSystemPrompt(currency: CurrencyCode): string {
 }
 
 /**
+ * For each money amount in the question, the exact balance after spending it, and after
+ * upcoming expenses too, in the display currency. Language models are unreliable at
+ * arithmetic, so the server does the math and the AI explains it.
+ */
+export function affordabilityNotes(question: string, currency: CurrencyCode): string[] {
+  // All math happens in the display currency's minor units (e.g. paise), converting each
+  // amount once, so there are no USD round-trip rounding errors (₹5,000 stays ₹5,000.00).
+  const toDisplay = (usdCents: number) => convertUsdCents(usdCents, currency, MOCK_EXCHANGE_RATES);
+  const fmt = (minor: number) => formatMinorUnits(minor, currency);
+  const balance = toDisplay(totalBalanceCents(MOCK_OPENING_BALANCE_CENTS, mockTransactions));
+  const upcoming = toDisplay(estimateUpcomingBills(mockTransactions, MOCK_AS_OF, 30).reduce((s, b) => s + b.amountCents, 0));
+  return findAmounts(question).map(({ text, amount, currency: from }) => {
+    const cost = convertAmount(amount, from, currency, MOCK_EXCHANGE_RATES);
+    const afterPurchase = balance - cost;
+    const afterUpcoming = afterPurchase - upcoming;
+    return (
+      `If spending ${text} (${fmt(cost)}): current balance ${fmt(balance)} minus cost = ${fmt(afterPurchase)}; ` +
+      `then minus upcoming expenses ${fmt(upcoming)} = ${fmt(afterUpcoming)}` +
+      (afterUpcoming < 0 ? " (NOT affordable after upcoming expenses)." : ".")
+    );
+  });
+}
+
+/**
  * The final user turn: the structured JSON data plus the question, followed by exact
- * server-computed conversions for any money amounts in the question.
+ * server-computed figures (currency conversions and affordability math) when the
+ * question mentions money amounts.
  */
 export function buildUserPrompt(question: string, currency: CurrencyCode): string {
   const prompt = `Here is my current financial data:\n${formatFinancialContext()}\n\nMy question is: ${question}`;
-  const hints = currencyHints(question, currency, MOCK_EXCHANGE_RATES);
-  if (hints.length === 0) return prompt;
-  return `${prompt}\n\n[Exact currency conversions computed by CalmOwe; use these figures: ${hints.join(" ")}]`;
+  const figures = [...currencyHints(question, currency, MOCK_EXCHANGE_RATES), ...affordabilityNotes(question, currency)];
+  if (figures.length === 0) return prompt;
+  return `${prompt}\n\n[Exact figures computed by CalmOwe; use these exactly and do not recalculate: ${figures.join(" ")}]`;
 }
 
 // ---------- Model call ----------

@@ -45,6 +45,7 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 - System prompt rewritten around: "You are CalmOwe, an expert AI financial copilot... base every answer strictly on the provided transaction data... balance minus the cost, and factor in upcoming expenses... do not make up numbers... say if data is insufficient... no investment advice."
 - Each question is sent as "Here is my current financial data: {JSON}. My question is: {question}" (plus exact currency conversions when the question has amounts).
 - Loading state now reads "CalmOwe is analyzing your data..."
+- Bug found in live test: for "$2,000 laptop" the AI said $10,914.65 left after upcoming bills (correct: $11,344.65). Fix: when a question mentions an amount, the server computes "balance minus cost" and "minus upcoming expenses" exactly, in the display currency, and appends them as "Exact figures computed by CalmOwe" (`affordabilityNotes`). The AI explains; it doesn't do the math.
 - Tests: `copilot-context.test.ts` (date math, upcoming bills, context totals, JSON formatting, system prompt wording, prompt format); route tests updated. 141 tests total.
 
 **What's in progress (not finished)**
@@ -54,7 +55,7 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 - Upcoming bills are an estimate from mock data. With real bank data, recurring-bill detection needs to be more robust (amount changes, irregular dates).
 
 **Tests**
-- [x] `npm test` passes (141)
+- [x] `npm test` passes (147)
 - [x] `npm run build` passes
 
 ### 2026-11-14 — Day 10: Dedicated /copilot page
