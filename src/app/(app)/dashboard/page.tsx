@@ -16,7 +16,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Money } from "@/components/currency/currency-store";
-import { CopilotBar } from "@/components/dashboard/CopilotBar";
 import { SpendingChart } from "@/components/dashboard/SpendingChart";
 import {
   MOCK_AS_OF,
@@ -90,7 +89,7 @@ export default function Dashboard() {
 
   return (
     <main className="flex flex-1 flex-col">
-      <div className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 pt-6 sm:px-6 lg:px-8 lg:pt-8">
+      <div className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 pb-10 pt-6 sm:px-6 lg:px-8 lg:pt-8">
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-3">
           <StatCard label="Total Balance" icon={Wallet} value={<Money cents={balance} />}>
@@ -214,8 +213,6 @@ export default function Dashboard() {
           {MOCK_EXCHANGE_RATES.GBP} GBP), not live exchange rates.
         </p>
       </div>
-
-      <CopilotBar />
     </main>
   );
 }

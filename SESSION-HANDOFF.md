@@ -34,6 +34,31 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 10: Dedicated /copilot page
+
+**Goal for today**
+- Move the AI chat to its own full-height page.
+
+**What got done**
+- New route `/copilot` (`src/app/(app)/copilot/page.tsx`, UI in `src/components/copilot/CopilotChat.tsx`).
+  - Header "CalmOwe Copilot" with a New chat button, scrollable message area, input pinned to the bottom (fits the screen exactly, no page scroll).
+  - Empty state: "Hi Hari, how can I help you with your money today?" plus 3 suggestion chips (₹5,000 purchase, spending this week, pay off debt faster). Clicking a chip sends it.
+  - Chat bubbles, animated "Thinking" indicator, error bubbles. Enter sends, Shift+Enter adds a line. Input grows with the text.
+- Sidebar "AI Copilot" now goes to `/copilot` and is highlighted there.
+- Removed the chat bar from the dashboard (and the old `CopilotBar` component). Chat logic now lives in a reusable hook `useCopilotChat`.
+- Backend unchanged apart from the prompt: the AI still gets the mock transaction data from the server, now also all four demo exchange rates (so "₹5,000" converts correctly in any display currency) and an instruction to format amounts with thousands separators.
+- Tests: `copilot-page.test.tsx` (nav highlight, empty state, chips, typed messages, history, errors, new chat, no emojis). 100 tests total.
+
+**What's in progress (not finished)**
+- Nothing.
+
+**Blockers / decisions needed**
+- Conversations aren't saved; they reset when you leave the page.
+
+**Tests**
+- [x] `npm test` passes (100)
+- [x] `npm run build` passes
+
 ### 2026-11-14 — Day 9: AI Copilot connected
 
 **Goal for today**

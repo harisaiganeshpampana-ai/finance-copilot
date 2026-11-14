@@ -136,6 +136,13 @@ describe("POST /api/chat", () => {
     expect(system).toContain("1 USD = 83.5 INR");
   });
 
+  it("gives the AI all demo exchange rates so it can convert amounts like ₹5,000", async () => {
+    await chat({ message: "Can I afford a ₹5,000 purchase?", currency: "USD" });
+    const system: string = sentBody().messages[0].content;
+    expect(system).toContain("1 USD = 83.5 INR = 0.92 EUR = 0.79 GBP");
+    expect(system).toContain("thousands separators");
+  });
+
   it("passes valid conversation history", async () => {
     const history = [
       { role: "user", content: "What's my balance?" },

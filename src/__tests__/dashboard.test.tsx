@@ -75,11 +75,11 @@ describe("Dashboard (/dashboard)", () => {
     expect(within(table).getByText("Acme Corp Payroll")).toBeTruthy();
   });
 
-  it("shows the Copilot chat input (chat behavior is tested in copilot-chat.test.tsx)", () => {
+  it("no longer has a chat box; AI Copilot links to its own page", () => {
     renderDashboard();
-    expect(screen.getByLabelText("Ask the AI Copilot")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Send question" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByText(/isn't connected yet/i)).toBeNull();
+    expect(screen.queryByLabelText("Ask the AI Copilot")).toBeNull();
+    const nav = screen.getByRole("navigation", { name: "Dashboard" });
+    expect(within(nav).getByRole("link", { name: "AI Copilot" }).getAttribute("href")).toBe("/copilot");
   });
 
   it("has a currency selector with USD, INR, EUR and GBP", () => {

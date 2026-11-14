@@ -6,12 +6,12 @@ import { ArrowLeftRight, Compass, LayoutDashboard, Settings, type LucideIcon } f
 
 type NavItem = { label: string; icon: LucideIcon; href: string; matchPath?: string };
 
-// Transactions and AI Copilot are sections of the Overview page for now.
+// Transactions is a section of the Overview page for now.
 // `matchPath` marks which items count as "current" for highlighting.
 export const navItems: NavItem[] = [
   { label: "Overview", icon: LayoutDashboard, href: "/dashboard", matchPath: "/dashboard" },
   { label: "Transactions", icon: ArrowLeftRight, href: "/dashboard#transactions" },
-  { label: "AI Copilot", icon: Compass, href: "/dashboard#copilot" },
+  { label: "AI Copilot", icon: Compass, href: "/copilot", matchPath: "/copilot" },
   { label: "Settings", icon: Settings, href: "/settings", matchPath: "/settings" },
 ];
 
