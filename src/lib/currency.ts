@@ -1,5 +1,6 @@
-// Multi-currency helpers. All amounts are stored in US cents; we convert to the
-// display currency's minor unit (paise, euro cents, pence) and format with Intl.
+// Multi-currency helpers. Amounts are stored in whole minor units (US cents by default; paise
+// for uploaded Indian bank statements). We convert to the display currency's minor unit
+// (paise, euro cents, pence) and format with Intl.
 
 export const CURRENCY_CODES = ["USD", "INR", "EUR", "GBP"] as const;
 export type CurrencyCode = (typeof CURRENCY_CODES)[number];
@@ -49,4 +50,25 @@ export function formatUsdCentsAs(
   options?: { decimals?: 0 | 2 },
 ): string {
   return formatMinorUnits(convertUsdCents(cents, currency, rates), currency, options);
+}
+
+/**
+ * Converts an amount in `from`'s minor unit (cents, paise...) to `to`'s minor unit.
+ * Same currency returns the amount unchanged (exact, no rounding).
+ */
+export function convertMinor(minor: number, from: CurrencyCode, to: CurrencyCode, rates: ExchangeRates): number {
+  if (!isCurrencyCode(from)) throw new Error(`Unsupported currency: ${String(from)}`);
+  if (from === to) {
+    if (!Number.isSafeInteger(minor)) throw new Error(`Invalid amount: ${minor}`);
+    return minor;
+  }
+  if (!Number.isSafeInteger(minor)) throw new Error(`Invalid amount: ${minor}`);
+  if (!isCurrencyCode(to)) throw new Error(`Unsupported currency: ${String(to)}`);
+  const fromRate = rates[from];
+  const toRate = rates[to];
+  for (const [code, r] of [[from, fromRate], [to, toRate]] as const) {
+    if (!Number.isFinite(r) || r <= 0) throw new Error(`Invalid exchange rate for ${code}: ${r}`);
+  }
+  // One rounding step, e.g. paise -> US cents. `0 +` turns -0 into 0.
+  return 0 + Math.round((minor * toRate) / fromRate);
 }

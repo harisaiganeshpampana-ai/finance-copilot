@@ -1,4 +1,4 @@
-import type { ExchangeRates } from "@/lib/currency";
+import type { CurrencyCode, ExchangeRates } from "@/lib/currency";
 
 // Mock data only. Not connected to any bank.
 // Amounts are in whole cents to avoid rounding errors:
@@ -12,7 +12,8 @@ export type Category =
   | "transport"
   | "shopping"
   | "utilities"
-  | "subscriptions";
+  | "subscriptions"
+  | "other";
 
 export type Transaction = {
   id: string;
@@ -20,6 +21,8 @@ export type Transaction = {
   merchant: string;
   category: Category;
   amountCents: number;
+  /** Full bank narration, when it differs from the short merchant name (uploaded statements). */
+  description?: string;
 };
 
 /** The "today" the mock data is written for. Used instead of the real clock so results are stable. */
@@ -54,12 +57,26 @@ export const mockTransactions: Transaction[] = [
 
 // ---------- Per-user financial data ----------
 
+/** Details of the bank statement a user uploaded (Monthly Financial Audit). */
+export type StatementInfo = {
+  bank: string;
+  fileName: string;
+  uploadedAt: string; // ISO timestamp
+  periodStart: string; // YYYY-MM-DD
+  periodEnd: string; // YYYY-MM-DD
+};
+
 /** Everything the dashboard and the AI Copilot need for one user. */
 export type FinancialData = {
   transactions: Transaction[];
+  /** Whole minor units (cents/paise) of `currency`, like every amount here. */
   openingBalanceCents: number;
   /** "Today" for calculations (YYYY-MM-DD). */
   asOf: string;
+  /** Currency of all amounts in this data. Absent means US dollars. */
+  currency?: CurrencyCode;
+  /** Set when the data comes from an uploaded bank statement. */
+  statement?: StatementInfo;
 };
 
 /** The original mock data as FinancialData (used in tests and the landing page preview). */

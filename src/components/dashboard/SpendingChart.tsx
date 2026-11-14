@@ -2,15 +2,15 @@
 
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useCurrency } from "@/components/currency/currency-store";
-import { convertUsdCents, formatMinorUnits } from "@/lib/currency";
+import { formatMinorUnits } from "@/lib/currency";
 
-export type SpendingPoint = { label: string; usdCents: number };
+export type SpendingPoint = { label: string; minor: number };
 
 export function SpendingChart({ data }: { data: SpendingPoint[] }) {
-  const { currency, rates } = useCurrency();
+  const { currency, convert } = useCurrency();
 
-  // Plot in the selected currency's major unit (e.g. rupees), converted from US cents.
-  const points = data.map((d) => ({ label: d.label, amount: convertUsdCents(d.usdCents, currency, rates) / 100 }));
+  // Plot in the selected currency's major unit (e.g. rupees), converted from the stored amounts.
+  const points = data.map((d) => ({ label: d.label, amount: convert(d.minor) / 100 }));
   const fmt = (major: number, decimals: 0 | 2) => formatMinorUnits(Math.round(major * 100), currency, { decimals });
 
   return (

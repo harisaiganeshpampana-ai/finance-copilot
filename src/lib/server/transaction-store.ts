@@ -2,6 +2,7 @@
 
 import { Types } from "mongoose";
 import type { Category } from "@/data/mockTransactions";
+import { isCurrencyCode } from "@/lib/currency";
 import { connectToDatabase } from "@/lib/server/db";
 import type { TransactionStore } from "@/lib/server/transactions";
 import { TransactionModel } from "@/models/Transaction";
@@ -23,7 +24,25 @@ export const mongoTransactionStore: TransactionStore = {
       category: d.category as Category,
       // Stored as a positive amount + type; the app uses signed cents (money out is negative).
       amountCents: d.type === "income" ? d.amountCents : -d.amountCents,
+      ...(d.description && d.description !== d.merchant ? { description: d.description } : {}),
     }));
+  },
+
+  async getDataProfile(userId) {
+    await connectToDatabase();
+    const user = await User.findById(userId).select("dataCurrency statement").lean();
+    const s = user?.statement;
+    const statement =
+      s?.fileName && s.uploadedAt && s.periodStart && s.periodEnd
+        ? {
+            bank: s.bank ?? "Bank",
+            fileName: s.fileName,
+            uploadedAt: new Date(s.uploadedAt).toISOString(),
+            periodStart: s.periodStart,
+            periodEnd: s.periodEnd,
+          }
+        : null;
+    return { currency: isCurrencyCode(user?.dataCurrency) ? user.dataCurrency : "USD", statement };
   },
 
   async countByUser(userId) {

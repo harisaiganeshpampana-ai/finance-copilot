@@ -2,7 +2,9 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Car,
+  CircleDashed,
   Coffee,
+  FileSpreadsheet,
   House,
   Landmark,
   ShoppingBag,
@@ -14,11 +16,12 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { Money } from "@/components/currency/currency-store";
+import { DataCurrencyProvider, Money } from "@/components/currency/currency-store";
 import { SpendingChart } from "@/components/dashboard/SpendingChart";
 import { GenerateSampleDataButton } from "@/components/dashboard/GenerateSampleDataButton";
+import { formatPeriod, UploadStatementButton } from "@/components/dashboard/UploadStatement";
 import { WaitlistCard } from "@/components/dashboard/WaitlistCard";
-import { type Category, type FinancialData, MOCK_EXCHANGE_RATES } from "@/data/mockTransactions";
+import { type Category, type FinancialData, MOCK_EXCHANGE_RATES, type StatementInfo } from "@/data/mockTransactions";
 import { dailySpending, formatPercent, monthTotals, percentChange, totalBalanceCents } from "@/lib/insights";
 
 const shortDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -34,7 +37,41 @@ const categoryMeta: Record<Category, { label: string; icon: LucideIcon }> = {
   shopping: { label: "Shopping", icon: ShoppingBag },
   utilities: { label: "Utilities", icon: Zap },
   subscriptions: { label: "Subscriptions", icon: Tv },
+  other: { label: "Other", icon: CircleDashed },
 };
+
+/** Top bar: what the data is (uploaded statement or sample data) and the upload button. */
+function DataSourceBar({ statement }: { statement?: StatementInfo }) {
+  return (
+    <section
+      className="relative flex flex-col gap-4 overflow-hidden rounded-xl border border-zinc-800 bg-gradient-to-br from-zinc-900/80 via-zinc-900/40 to-indigo-950/30 p-5 sm:flex-row sm:items-center sm:justify-between"
+      data-testid="data-source-bar"
+    >
+      <div className="flex items-center gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-indigo-400/20 bg-indigo-500/10 text-indigo-300">
+          <FileSpreadsheet className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-indigo-300/80">Monthly Financial Audit</p>
+          {statement ? (
+            <>
+              <p className="truncate text-sm font-medium text-white">
+                {statement.bank} &middot; {formatPeriod(statement.periodStart, statement.periodEnd)}
+              </p>
+              <p className="truncate text-xs text-zinc-500">From {statement.fileName}</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-white">You&apos;re viewing sample data</p>
+              <p className="text-xs text-zinc-500">Upload your bank statement to audit your real spending.</p>
+            </>
+          )}
+        </div>
+      </div>
+      <UploadStatementButton label={statement ? "Upload another statement" : "Upload Bank Statement"} />
+    </section>
+  );
+}
 
 function StatCard({
   label,
@@ -76,15 +113,18 @@ export function DashboardView({ data, waitlistJoined = false }: { data: Financia
   const { incomeCents, expensesCents } = monthTotals(all, asOf);
   const spending = dailySpending(all, asOf, 7);
   const spentLast7 = spending.reduce((sum, d) => sum + d.spendingCents, 0);
-  const chartData = spending.map((d) => ({ label: weekday.format(toDate(d.date)), usdCents: d.spendingCents }));
+  const chartData = spending.map((d) => ({ label: weekday.format(toDate(d.date)), minor: d.spendingCents }));
   const transactions = [...all].sort((a, b) => b.date.localeCompare(a.date));
 
   const trendUp = trend !== null && trend >= 0;
   const TrendIcon = trendUp ? TrendingUp : TrendingDown;
 
   return (
+    <DataCurrencyProvider currency={data.currency ?? "USD"}>
     <main className="flex flex-1 flex-col">
       <div className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 pb-10 pt-6 sm:px-6 lg:px-8 lg:pt-8">
+        <DataSourceBar statement={data.statement} />
+
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-3">
           <StatCard label="Total Balance" icon={Wallet} value={<Money cents={balance} />}>
@@ -206,11 +246,13 @@ export function DashboardView({ data, waitlistJoined = false }: { data: Financia
         </section>
 
         <p className="text-center text-xs text-zinc-600">
+          {data.currency && data.currency !== "USD" ? `Your statement amounts are in ${data.currency}. ` : ""}
           Other currencies use fixed demo rates (1 USD = {MOCK_EXCHANGE_RATES.INR} INR, {MOCK_EXCHANGE_RATES.EUR} EUR,{" "}
           {MOCK_EXCHANGE_RATES.GBP} GBP), not live exchange rates.
         </p>
       </div>
     </main>
+    </DataCurrencyProvider>
   );
 }
 
@@ -224,10 +266,11 @@ export function EmptyDashboard({ waitlistJoined = false }: { waitlistJoined?: bo
         </span>
         <h2 className="mt-6 text-2xl font-semibold tracking-tight text-white">No transactions yet</h2>
         <p className="mt-2 max-w-md text-sm text-zinc-400">
-          Connect a bank account to see your real balances, or load sample data to explore your dashboard and the AI
+          Upload your bank statement for a Monthly Financial Audit, or load sample data to explore your dashboard and the AI
           Copilot.
         </p>
-        <div className="mt-8">
+        <div className="mt-8 flex flex-col items-center gap-4">
+          <UploadStatementButton />
           <GenerateSampleDataButton />
         </div>
         <div className="mt-12 w-full text-left">

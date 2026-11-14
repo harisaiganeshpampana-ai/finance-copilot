@@ -4,6 +4,36 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ---
 
+## START HERE (current state, updated 2026-11-14)
+
+**CalmOwe** is live at https://www.calmowe.com (Vercel, auto-deploys from GitHub `main`). Repo: github.com/harisaiganeshpampana-ai/finance-copilot. Founder: non-technical; explain in plain words, one step at a time.
+
+**What exists**
+- Public: landing `/`, `/pricing`, `/terms`, `/privacy` (legal text needs lawyer review).
+- Accounts: NextAuth v4 (email/password + Google), MongoDB Atlas via Mongoose. Protected `/dashboard`, `/copilot`, `/settings` (src/proxy.ts).
+- Per-user data: `Transaction` model; new users get 10 sample transactions; "Generate sample data" for empty accounts.
+- Dashboard: stats, 7-day chart, transactions, multi-currency (USD/INR/EUR/GBP, fixed demo rates), waitlist for real sync.
+- AI Copilot `/copilot`: `/api/chat`, Gemini → OpenAI → DeepSeek fallback, user's own data from MongoDB, server-side math for currency/affordability, no investment advice.
+- Plaid (Sandbox): `/api/plaid/create_link_token`, `/api/plaid/exchange_public_token`; access token stored AES-256-GCM encrypted on the user; connection per account.
+- **Monthly Financial Audit (CSV upload, current focus)**: "Upload Bank Statement" on the dashboard → `POST /api/statements/upload` (login, .csv only, 2 MB max) → `src/lib/server/statement-csv.ts` (papaparse; Canara layout plus Amount/Dr-Cr variants) → `Transaction` rows with `source: "upload"`, deduped by `externalId`. Amounts are exact paise; `User.dataCurrency = "INR"` and `User.statement` hold the statement info. Dashboard/Copilot convert from the data currency (`DataCurrencyProvider`, `convertMinor`). Copilot gets `dataSource` + server-computed `audit` figures.
+- Plaid transaction import (`/transactions/sync`) is built and tested but **parked on branch `plaid-transaction-import`** (not pushed) while live APIs wait for incorporation. Merging it will conflict in `Transaction.ts`, `mockTransactions.ts`, `DashboardView.tsx` ("other" category added on both sides).
+- 361 automated tests (`npm test`), build passes.
+
+**Env vars (Vercel; local .env.local is incomplete)**: MONGODB_URI, NEXTAUTH_SECRET, NEXTAUTH_URL=https://www.calmowe.com, GOOGLE_CLIENT_ID/SECRET, GEMINI_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY, PLAID_CLIENT_ID/SECRET, PLAID_ENV=sandbox. Recommended: add ENCRYPTION_KEY.
+
+**Next steps (pick one)**
+1. Test CSV upload with a REAL Canara Bank CSV export (the parser was built from the usual Canara layout, not a real file). Fix the column matching if anything is off.
+2. "Remove uploaded data" button (currently only re-upload/add); support more banks (SBI, HDFC, ICICI layouts).
+3. When incorporated: merge branch `plaid-transaction-import` (Plaid `/transactions/sync` import).
+4. India bank data via an Account Aggregator (Finvu docs: https://docs.finvu.in; or Setu). First check the FIU regulatory route with Finvu.
+5. Settings page: load/save the real user's name and email (still placeholder).
+6. Password reset; payments (Stripe or Razorpay) for the Subscribe buttons.
+7. Before launch: lawyer review of Terms/Privacy, create legal@ and privacy@calmowe.com, trademark check.
+
+**Working notes**: on this Windows PC use `npm.cmd` in PowerShell (scripts are blocked); push with `git push origin main`; Claude can't log into the live site, so the founder does the final logged-in check.
+
+---
+
 ## Template (copy this for each new day)
 
 ### YYYY-MM-DD — <who worked on it>
@@ -33,6 +63,23 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 ---
 
 ## Log
+
+### 2026-11-14 — Day 20: Monthly Financial Audit (Canara Bank CSV upload)
+
+**Goal**: a working product today while live bank APIs wait for company incorporation.
+
+**What got done**
+- Plaid transaction import finished and tested, then parked on branch `plaid-transaction-import` (not pushed), per founder.
+- Premium "Upload Bank Statement" button + modal (drag and drop, progress, "audit ready" summary with period, money in/out). On the dashboard top bar and on the empty dashboard.
+- `POST /api/statements/upload`: server-side checks (login, .csv, 2 MB, row limit), papaparse, finds the table under Canara's account-details header, maps Txn Date / Description / Debit / Credit / Balance (also Amount + Dr/Cr), integer paise math, Indian day-first dates, UPI merchant names, keyword categories (new "other" category), stable fingerprints so re-uploads never duplicate. First upload removes sample data.
+- Rupees stored exactly (founder's choice): `User.dataCurrency`, opening balance derived from the statement's closing balance, display conversion via `convertMinor`.
+- Copilot: knows the data is an uploaded statement, gets monthly totals / category shares / largest expenses computed on the server, and a "Monthly Financial Audit" instruction. Still no investment advice.
+
+**Not verified**: no real Canara CSV was available (tested with a realistic made-up one); logged-in check on the live site is for the founder.
+
+**Tests**
+- [x] `npm test` passes (361)
+- [x] `npm run build` passes
 
 ### 2026-11-14 — Day 19b: Fix bank connection leaking between accounts
 

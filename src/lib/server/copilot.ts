@@ -2,7 +2,7 @@
 // It reads AI provider API keys from process.env; they must never reach the browser.
 
 import { type FinancialData, MOCK_EXCHANGE_RATES } from "@/data/mockTransactions";
-import { convertUsdCents, type CurrencyCode, formatMinorUnits, isCurrencyCode } from "@/lib/currency";
+import { convertMinor, type CurrencyCode, formatMinorUnits, isCurrencyCode } from "@/lib/currency";
 import { convertAmount, currencyHints, findAmounts } from "@/lib/currency-hints";
 import { dailySpending, estimateUpcomingBills, monthTotals, totalBalanceCents } from "@/lib/insights";
 
@@ -112,10 +112,22 @@ export function buildFinancialContext(data: FinancialData) {
   const balanceCents = totalBalanceCents(openingBalanceCents, transactions);
   const upcoming = estimateUpcomingBills(transactions, asOf, 30);
   const upcomingCents = upcoming.reduce((sum, b) => sum + b.amountCents, 0);
+  const statement = data.statement;
   return {
     asOf,
     transactionCount: transactions.length,
-    currency: "USD",
+    currency: data.currency ?? "USD",
+    ...(statement
+      ? {
+          dataSource: {
+            type: "Uploaded bank statement (Monthly Financial Audit)",
+            bank: statement.bank,
+            statementPeriod: `${statement.periodStart} to ${statement.periodEnd}`,
+            uploadedAt: statement.uploadedAt.slice(0, 10),
+          },
+          audit: statementAudit(data),
+        }
+      : {}),
     summary: {
       currentBalance: dollars(balanceCents),
       totalIncome: dollars(incomeCents),
@@ -144,7 +156,47 @@ export function buildFinancialContext(data: FinancialData) {
       merchant: t.merchant,
       category: t.category,
       amount: dollars(t.amountCents),
+      ...(t.description ? { description: t.description } : {}),
     })),
+  };
+}
+
+/**
+ * Whole-statement figures for a Monthly Financial Audit, computed on the server so the AI
+ * never adds up transactions itself: totals per calendar month, spending by category, and
+ * the largest expenses.
+ */
+export function statementAudit(data: FinancialData) {
+  const { transactions } = data;
+  const months = new Map<string, { moneyIn: number; moneyOut: number }>();
+  const byCategory = new Map<string, number>();
+  for (const t of transactions) {
+    const m = months.get(t.date.slice(0, 7)) ?? { moneyIn: 0, moneyOut: 0 };
+    if (t.amountCents > 0) m.moneyIn += t.amountCents;
+    else {
+      m.moneyOut -= t.amountCents;
+      byCategory.set(t.category, (byCategory.get(t.category) ?? 0) - t.amountCents);
+    }
+    months.set(t.date.slice(0, 7), m);
+  }
+  const totalOut = [...byCategory.values()].reduce((s, v) => s + v, 0);
+  return {
+    note: "Totals across the whole uploaded statement. Amounts are positive; moneyOut is spending.",
+    months: [...months.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, m]) => ({ month, moneyIn: dollars(m.moneyIn), moneyOut: dollars(m.moneyOut), net: dollars(m.moneyIn - m.moneyOut) })),
+    spendingByCategory: [...byCategory.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([category, cents]) => ({
+        category,
+        spent: dollars(cents),
+        shareOfSpending: totalOut > 0 ? `${Math.round((cents / totalOut) * 1000) / 10}%` : "0%",
+      })),
+    largestExpenses: transactions
+      .filter((t) => t.amountCents < 0)
+      .sort((a, b) => a.amountCents - b.amountCents)
+      .slice(0, 5)
+      .map((t) => ({ date: t.date, merchant: t.merchant, amount: dollars(-t.amountCents) })),
   };
 }
 
@@ -153,8 +205,17 @@ export function formatFinancialContext(context: FinancialContext): string {
   return JSON.stringify(context, null, 2);
 }
 
-export function buildSystemPrompt(currency: CurrencyCode): string {
-  const rate = MOCK_EXCHANGE_RATES[currency];
+/** How the data's currency relates to the display currency, for the system prompt. */
+function dataCurrencyLine(display: CurrencyCode, data: CurrencyCode): string {
+  if (data === "USD") {
+    return `Show money amounts in ${display}. All amounts in the data are USD; convert at 1 USD = ${MOCK_EXCHANGE_RATES[display]} ${display} (fixed demo rate).`;
+  }
+  if (data === display) return `Show money amounts in ${display}. All amounts in the data are already ${data}; do not convert them.`;
+  const rate = Math.round((MOCK_EXCHANGE_RATES[display] / MOCK_EXCHANGE_RATES[data]) * 1e6) / 1e6;
+  return `Show money amounts in ${display}. All amounts in the data are ${data}; convert at 1 ${data} = ${rate} ${display} (fixed demo rate).`;
+}
+
+export function buildSystemPrompt(currency: CurrencyCode, dataCurrency: CurrencyCode = "USD"): string {
   return [
     "You are CalmOwe, an expert AI financial copilot.",
     "You must base every answer strictly on the provided transaction data. Do not make up numbers. If the data is insufficient, state that clearly.",
@@ -162,8 +223,9 @@ export function buildSystemPrompt(currency: CurrencyCode): string {
     "Use the totals in the summary as given; do not re-add transactions.",
     "Do not provide investment advice. Do not recommend buying, selling, or holding any stock, fund, ETF, bond, crypto, or other security, or suggest where to invest. If asked, briefly say you only help with cash flow and debt, then offer a related cash-flow or debt answer.",
     "You are not a licensed financial advisor; for major decisions, suggest consulting one.",
-    "If transactionCount is 0, say there is no transaction data yet and suggest connecting a bank account or generating sample data from the dashboard. Do not guess.",
-    `Show money amounts in ${currency}. All amounts in the data are USD; convert at 1 USD = ${rate} ${currency} (fixed demo rate).`,
+    "If transactionCount is 0, say there is no transaction data yet and suggest uploading a bank statement (CSV) or generating sample data from the dashboard. Do not guess.",
+    dataCurrencyLine(currency, dataCurrency),
+    "If the data includes dataSource (an uploaded bank statement), act as a Monthly Financial Audit: when asked for a summary or audit, cover money in vs money out per month, the top spending categories with their share, the largest expenses, recurring payments, and one or two practical cash-flow or debt-repayment suggestions. Use the audit figures as given.",
     "Read currency symbols carefully: ₹ or Rs means Indian rupees (INR), $ means US dollars, € means euros, £ means pounds. Never treat a rupee amount as dollars.",
     "When the message includes 'Exact figures computed by CalmOwe', use those figures exactly. Do not do your own arithmetic on them.",
     `If the user mentions an amount in another currency, convert it with these fixed demo rates: 1 USD = ${MOCK_EXCHANGE_RATES.INR} INR = ${MOCK_EXCHANGE_RATES.EUR} EUR = ${MOCK_EXCHANGE_RATES.GBP} GBP.`,
@@ -181,7 +243,7 @@ export function buildSystemPrompt(currency: CurrencyCode): string {
 export function affordabilityNotes(question: string, currency: CurrencyCode, data: FinancialData): string[] {
   // All math happens in the display currency's minor units (e.g. paise), converting each
   // amount once, so there are no USD round-trip rounding errors (₹5,000 stays ₹5,000.00).
-  const toDisplay = (usdCents: number) => convertUsdCents(usdCents, currency, MOCK_EXCHANGE_RATES);
+  const toDisplay = (minor: number) => convertMinor(minor, data.currency ?? "USD", currency, MOCK_EXCHANGE_RATES);
   const fmt = (minor: number) => formatMinorUnits(minor, currency);
   const balance = toDisplay(totalBalanceCents(data.openingBalanceCents, data.transactions));
   const upcoming = toDisplay(estimateUpcomingBills(data.transactions, data.asOf, 30).reduce((s, b) => s + b.amountCents, 0));
@@ -274,7 +336,7 @@ export async function askCopilot(
       // an empty answer. Short cash-flow answers don't need it.
       ...(provider.name === "gemini" ? { reasoning_effort: "none" } : {}),
       messages: [
-        { role: "system", content: buildSystemPrompt(request.currency) },
+        { role: "system", content: buildSystemPrompt(request.currency, request.financial.currency ?? "USD") },
         ...request.history,
         { role: "user", content: buildUserPrompt(request.message, request.currency, request.financial) },
       ],

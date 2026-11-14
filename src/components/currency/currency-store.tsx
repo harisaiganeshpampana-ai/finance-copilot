@@ -1,8 +1,16 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useSyncExternalStore } from "react";
 import { MOCK_EXCHANGE_RATES } from "@/data/mockTransactions";
-import { type CurrencyCode, formatUsdCentsAs, isCurrencyCode } from "@/lib/currency";
+import { convertMinor, type CurrencyCode, formatMinorUnits, isCurrencyCode } from "@/lib/currency";
+
+// The currency the user's stored amounts are in (USD by default; INR for an uploaded Indian
+// bank statement). Amounts are converted from this to the selected display currency.
+const DataCurrencyContext = createContext<CurrencyCode>("USD");
+
+export function DataCurrencyProvider({ currency, children }: { currency: CurrencyCode; children: ReactNode }) {
+  return <DataCurrencyContext.Provider value={currency}>{children}</DataCurrencyContext.Provider>;
+}
 
 // One app-wide store for the selected display currency. Every component that
 // calls useCurrency() re-renders instantly when it changes; no reload needed.
@@ -49,18 +57,20 @@ export function resetCurrencyForTests(): void {
 
 export function useCurrency() {
   const currency = useSyncExternalStore(subscribe, read, () => DEFAULT_CURRENCY);
+  const base = useContext(DataCurrencyContext);
   const setCurrency = useCallback((code: CurrencyCode) => {
     if (isCurrencyCode(code)) write(code);
   }, []);
+  /** Stored minor units (in the data currency) -> display currency minor units. */
+  const convert = useCallback((minor: number) => convertMinor(minor, base, currency, MOCK_EXCHANGE_RATES), [base, currency]);
   const format = useCallback(
-    (usdCents: number, options?: { decimals?: 0 | 2 }) =>
-      formatUsdCentsAs(usdCents, currency, MOCK_EXCHANGE_RATES, options),
-    [currency],
+    (minor: number, options?: { decimals?: 0 | 2 }) => formatMinorUnits(convert(minor), currency, options),
+    [convert, currency],
   );
-  return { currency, setCurrency, format, rates: MOCK_EXCHANGE_RATES };
+  return { currency, base, setCurrency, convert, format, rates: MOCK_EXCHANGE_RATES };
 }
 
-/** Renders a US-cents amount in the selected currency. `signed` adds "+" to positive amounts. */
+/** Renders a stored amount in the selected currency. `signed` adds "+" to positive amounts. */
 export function Money({ cents, signed = false }: { cents: number; signed?: boolean }) {
   const { format } = useCurrency();
   return (
