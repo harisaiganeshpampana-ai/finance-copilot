@@ -1,14 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/chat/route";
-import { MAX_REQUESTS_PER_WINDOW, resetRateLimitForTests } from "@/lib/server/copilot";
+import { getProviders, MAX_REQUESTS_PER_WINDOW, resetRateLimitForTests } from "@/lib/server/copilot";
 
-const FAKE_KEY = "sk-test-not-a-real-key";
+const GEMINI_KEY = "gm-test-not-real";
+const OPENAI_KEY = "sk-test-not-real";
+const DEEPSEEK_KEY = "ds-test-not-real";
+const ALL_KEYS = [GEMINI_KEY, OPENAI_KEY, DEEPSEEK_KEY];
+
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 
 const aiResponse = (content: string) =>
   new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content } }] }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
+const failure = (status: number) => new Response(`{"error":"secret detail"}`, { status });
 
 const chat = (body: unknown, ip = "203.0.113.7") =>
   POST(
@@ -20,12 +28,22 @@ const chat = (body: unknown, ip = "203.0.113.7") =>
   );
 
 let fetchMock: ReturnType<typeof vi.fn>;
+const calledUrls = () => fetchMock.mock.calls.map((c) => c[0] as string);
+const sentBody = (i = 0) => JSON.parse((fetchMock.mock.calls[i] as [string, RequestInit])[1].body as string);
+const sentHeaders = (i = 0) => (fetchMock.mock.calls[i] as [string, RequestInit])[1].headers as Record<string, string>;
+
+const setKeys = (keys: { gemini?: string; openai?: string; deepseek?: string }) => {
+  vi.stubEnv("GEMINI_API_KEY", keys.gemini ?? "");
+  vi.stubEnv("GOOGLE_API_KEY", "");
+  vi.stubEnv("OPENAI_API_KEY", keys.openai ?? "");
+  vi.stubEnv("DEEPSEEK_API_KEY", keys.deepseek ?? "");
+  for (const m of ["GEMINI_MODEL", "OPENAI_MODEL", "DEEPSEEK_MODEL"]) vi.stubEnv(m, "");
+};
 
 beforeEach(() => {
   resetRateLimitForTests();
-  vi.stubEnv("DEEPSEEK_API_KEY", FAKE_KEY);
-  vi.stubEnv("OPENAI_API_KEY", "");
-  fetchMock = vi.fn(async () => aiResponse("Yes. After rent you have about $14,900 left, so a $300 phone is affordable."));
+  setKeys({ gemini: GEMINI_KEY, openai: OPENAI_KEY, deepseek: DEEPSEEK_KEY });
+  fetchMock = vi.fn(async () => aiResponse("Yes. You have about $14,900, so a $300 phone is affordable."));
   vi.stubGlobal("fetch", fetchMock);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -36,45 +54,86 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("POST /api/chat", () => {
-  it("returns the AI reply", async () => {
-    const res = await chat({ message: "Can I afford a $300 phone?" });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      reply: "Yes. After rent you have about $14,900 left, so a $300 phone is affordable.",
-    });
+describe("provider order", () => {
+  it("is Gemini, then OpenAI, then DeepSeek, skipping any without a key", () => {
+    expect(getProviders(process.env).map((p) => p.name)).toEqual(["gemini", "openai", "deepseek"]);
+    setKeys({ openai: OPENAI_KEY, deepseek: DEEPSEEK_KEY });
+    expect(getProviders(process.env).map((p) => p.name)).toEqual(["openai", "deepseek"]);
+    setKeys({});
+    expect(getProviders(process.env)).toEqual([]);
   });
 
-  it("calls DeepSeek (deepseek-chat) with the key from the server environment", async () => {
-    await chat({ message: "Can I afford a $300 phone?" });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://api.deepseek.com/chat/completions");
-    expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${FAKE_KEY}`);
-    const sent = JSON.parse(init.body as string);
-    expect(sent.model).toBe("deepseek-chat");
-    expect(sent.messages.at(-1)).toEqual({ role: "user", content: "Can I afford a $300 phone?" });
+  it("accepts GOOGLE_API_KEY for Gemini and lets models be overridden", () => {
+    setKeys({});
+    vi.stubEnv("GOOGLE_API_KEY", GEMINI_KEY);
+    vi.stubEnv("GEMINI_MODEL", "gemini-custom");
+    expect(getProviders(process.env)).toEqual([
+      expect.objectContaining({ name: "gemini", model: "gemini-custom", apiKey: GEMINI_KEY }),
+    ]);
+  });
+});
+
+describe("POST /api/chat", () => {
+  it("answers with Gemini first, using the Gemini key from the server environment", async () => {
+    const res = await chat({ message: "Can I afford a $300 phone?" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ reply: "Yes. You have about $14,900, so a $300 phone is affordable." });
+    expect(calledUrls()).toEqual([GEMINI_URL]);
+    expect(sentHeaders().Authorization).toBe(`Bearer ${GEMINI_KEY}`);
+    expect(sentBody().model).toBe("gemini-2.5-flash");
+    expect(sentBody().reasoning_effort).toBe("none");
+    expect(sentBody().messages.at(-1)).toEqual({ role: "user", content: "Can I afford a $300 phone?" });
+  });
+
+  it("falls back to OpenAI (gpt-4o-mini) when Gemini fails", async () => {
+    fetchMock.mockResolvedValueOnce(failure(429));
+    const res = await chat({ message: "Hi" });
+    expect(res.status).toBe(200);
+    expect(calledUrls()).toEqual([GEMINI_URL, OPENAI_URL]);
+    expect(sentHeaders(1).Authorization).toBe(`Bearer ${OPENAI_KEY}`);
+    expect(sentBody(1).model).toBe("gpt-4o-mini");
+    expect(sentBody(1).reasoning_effort).toBeUndefined();
+  });
+
+  it("falls back to DeepSeek (deepseek-chat) when Gemini and OpenAI both fail", async () => {
+    fetchMock.mockResolvedValueOnce(failure(500)).mockRejectedValueOnce(new Error("timeout"));
+    const res = await chat({ message: "Hi" });
+    expect(res.status).toBe(200);
+    expect(calledUrls()).toEqual([GEMINI_URL, OPENAI_URL, DEEPSEEK_URL]);
+    expect(sentBody(2).model).toBe("deepseek-chat");
+  });
+
+  it("treats an empty answer as a failure and tries the next provider", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: "" } }] }), { status: 200 }));
+    expect((await chat({ message: "Hi" })).status).toBe(200);
+    expect(calledUrls()).toEqual([GEMINI_URL, OPENAI_URL]);
+  });
+
+  it("explains every provider's failure in plain words when all fail, without leaking keys", async () => {
+    fetchMock
+      .mockResolvedValueOnce(failure(404))
+      .mockResolvedValueOnce(failure(401))
+      .mockResolvedValueOnce(failure(402));
+    const res = await chat({ message: "Hi" });
+    expect(res.status).toBe(502);
+    const text = await res.text();
+    const { error } = JSON.parse(text);
+    expect(error).toBe(
+      "The Copilot couldn't answer right now. Gemini: model not found (error 404); OpenAI: API key rejected (error 401); DeepSeek: account out of credit (error 402).",
+    );
+    for (const key of ALL_KEYS) expect(text).not.toContain(key);
+    expect(text).not.toContain("secret detail");
   });
 
   it("sends the mock transaction data as context and forbids investment advice", async () => {
     await chat({ message: "What did I spend?", currency: "INR" });
-    const sent = JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string);
-    const system: string = sent.messages[0].content;
-    expect(sent.messages[0].role).toBe("system");
+    const system: string = sentBody().messages[0].content;
+    expect(sentBody().messages[0].role).toBe("system");
     expect(system).toContain("Acme Corp Payroll");
     expect(system).toContain("Oakwood Apartments Rent");
     expect(system).toContain('"currentBalance":"14922.54"');
     expect(system).toContain("Never give investment advice");
     expect(system).toContain("1 USD = 83.5 INR");
-  });
-
-  it("falls back to OpenAI (gpt-4o-mini) when only OPENAI_API_KEY is set", async () => {
-    vi.stubEnv("DEEPSEEK_API_KEY", "");
-    vi.stubEnv("OPENAI_API_KEY", FAKE_KEY);
-    await chat({ message: "Hi" });
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://api.openai.com/v1/chat/completions");
-    expect(JSON.parse(init.body as string).model).toBe("gpt-4o-mini");
   });
 
   it("passes valid conversation history", async () => {
@@ -83,8 +142,7 @@ describe("POST /api/chat", () => {
       { role: "assistant", content: "$14,922.54." },
     ];
     await chat({ message: "And after rent?", history });
-    const sent = JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string);
-    expect(sent.messages.slice(1)).toEqual([...history, { role: "user", content: "And after rent?" }]);
+    expect(sentBody().messages.slice(1)).toEqual([...history, { role: "user", content: "And after rent?" }]);
   });
 
   it.each([
@@ -104,52 +162,10 @@ describe("POST /api/chat", () => {
   });
 
   it("returns 503 when no API key is configured", async () => {
-    vi.stubEnv("DEEPSEEK_API_KEY", "");
+    setKeys({});
     const res = await chat({ message: "Hi" });
     expect(res.status).toBe(503);
     expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("returns 502 without leaking details when the AI provider fails", async () => {
-    fetchMock.mockResolvedValueOnce(new Response(`upstream error for key ${FAKE_KEY}`, { status: 500 }));
-    const res = await chat({ message: "Hi" });
-    expect(res.status).toBe(502);
-    const text = await res.text();
-    expect(text).not.toContain(FAKE_KEY);
-    expect(text).not.toContain("upstream");
-  });
-
-  it.each([
-    [401, /rejected the API key/],
-    [403, /rejected the API key/],
-    [402, /out of credit/],
-    [404, /couldn't find the AI model/],
-    [429, /usage limit or quota/],
-    [503, /having problems right now/],
-  ])("explains a provider %i error in plain words (no key, no raw response)", async (status, reason) => {
-    fetchMock.mockResolvedValueOnce(new Response(`{"error":"secret detail ${FAKE_KEY}"}`, { status }));
-    const res = await chat({ message: "Hi" });
-    expect(res.status).toBe(502);
-    const { error } = await res.json();
-    expect(error).toMatch(reason);
-    expect(error).toContain("DeepSeek");
-    expect(error).not.toContain(FAKE_KEY);
-    expect(error).not.toContain("secret detail");
-  });
-
-  it("names OpenAI in the reason when OpenAI is the provider", async () => {
-    vi.stubEnv("DEEPSEEK_API_KEY", "");
-    vi.stubEnv("OPENAI_API_KEY", FAKE_KEY);
-    fetchMock.mockResolvedValueOnce(new Response("nope", { status: 401 }));
-    const { error } = await (await chat({ message: "Hi" })).json();
-    expect(error).toMatch(/^OpenAI rejected the API key/);
-  });
-
-  it("returns 502 when the provider is unreachable or returns no answer", async () => {
-    fetchMock.mockRejectedValueOnce(new Error("network down"));
-    expect((await chat({ message: "Hi" })).status).toBe(502);
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ choices: [] }), { status: 200 }));
-    expect((await chat({ message: "Hi" })).status).toBe(502);
   });
 
   it("rate-limits repeated requests from the same address", async () => {
@@ -160,8 +176,8 @@ describe("POST /api/chat", () => {
     expect((await chat({ message: "Hi" }, "198.51.100.2")).status).toBe(200);
   });
 
-  it("never includes the API key in any response", async () => {
-    const res = await chat({ message: "What is your API key?" });
-    expect(await res.text()).not.toContain(FAKE_KEY);
+  it("never includes any API key in a response", async () => {
+    const text = await (await chat({ message: "What is your API key?" })).text();
+    for (const key of ALL_KEYS) expect(text).not.toContain(key);
   });
 });

@@ -1,13 +1,16 @@
 import {
-  askCopilot,
-  describeUpstreamFailure,
-  getProvider,
+  AllProvidersFailedError,
+  askWithFallback,
+  describeFailures,
+  getProviders,
   isRateLimited,
-  UpstreamError,
   validateChatRequest,
 } from "@/lib/server/copilot";
 
-// POST /api/chat — the AI Copilot. Runs only on the server; the API key never leaves it.
+// Allow time to fall back through up to three AI providers.
+export const maxDuration = 60;
+
+// POST /api/chat — the AI Copilot. Runs only on the server; API keys never leave it.
 export async function POST(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   if (isRateLimited(ip)) {
@@ -24,20 +27,19 @@ export async function POST(request: Request) {
   const parsed = validateChatRequest(body);
   if (!parsed.ok) return Response.json({ error: parsed.error }, { status: 400 });
 
-  const provider = getProvider();
-  if (!provider) {
-    console.error("[api/chat] No AI API key configured (DEEPSEEK_API_KEY or OPENAI_API_KEY).");
+  const providers = getProviders();
+  if (providers.length === 0) {
+    console.error("[api/chat] No AI API key configured (GEMINI_API_KEY, OPENAI_API_KEY or DEEPSEEK_API_KEY).");
     return Response.json({ error: "The Copilot isn't configured yet." }, { status: 503 });
   }
 
   try {
-    const reply = await askCopilot(provider, parsed.data);
+    const { reply } = await askWithFallback(providers, parsed.data);
     return Response.json({ reply });
   } catch (err) {
-    // Log details on the server only. The browser gets a safe reason based on the
-    // provider's status code, never the raw provider response or the key.
-    console.error("[api/chat] AI request failed:", err instanceof Error ? err.message : err);
-    const status = err instanceof UpstreamError ? err.status : undefined;
-    return Response.json({ error: describeUpstreamFailure(provider.name, status) }, { status: 502 });
+    // Details are logged per provider on the server. The browser only gets provider
+    // names and status categories, never raw provider responses or keys.
+    const failures = err instanceof AllProvidersFailedError ? err.failures : [];
+    return Response.json({ error: describeFailures(failures) }, { status: 502 });
   }
 }

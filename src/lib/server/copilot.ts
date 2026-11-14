@@ -12,19 +12,46 @@ import { dailySpending, monthTotals, totalBalanceCents } from "@/lib/insights";
 
 // ---------- Provider config ----------
 
-export type Provider = { name: "deepseek" | "openai"; url: string; model: string; apiKey: string };
+export type ProviderName = "gemini" | "openai" | "deepseek";
+export type Provider = { name: ProviderName; url: string; model: string; apiKey: string };
 
-/** Picks DeepSeek if DEEPSEEK_API_KEY is set, otherwise OpenAI if OPENAI_API_KEY is set. */
-export function getProvider(env: NodeJS.ProcessEnv = process.env): Provider | null {
-  const deepseek = env.DEEPSEEK_API_KEY?.trim();
-  if (deepseek) {
-    return { name: "deepseek", url: "https://api.deepseek.com/chat/completions", model: "deepseek-chat", apiKey: deepseek };
+export const PROVIDER_LABEL: Record<ProviderName, string> = { gemini: "Gemini", openai: "OpenAI", deepseek: "DeepSeek" };
+
+/**
+ * Every provider with a key configured, in fallback order: Gemini, then OpenAI, then DeepSeek.
+ * All three are called through their OpenAI-compatible chat-completions endpoints.
+ * Models can be overridden with GEMINI_MODEL / OPENAI_MODEL / DEEPSEEK_MODEL.
+ */
+export function getProviders(env: NodeJS.ProcessEnv = process.env): Provider[] {
+  const providers: Provider[] = [];
+  const gemini = (env.GEMINI_API_KEY || env.GOOGLE_API_KEY)?.trim();
+  if (gemini) {
+    providers.push({
+      name: "gemini",
+      url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      model: env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
+      apiKey: gemini,
+    });
   }
   const openai = env.OPENAI_API_KEY?.trim();
   if (openai) {
-    return { name: "openai", url: "https://api.openai.com/v1/chat/completions", model: "gpt-4o-mini", apiKey: openai };
+    providers.push({
+      name: "openai",
+      url: "https://api.openai.com/v1/chat/completions",
+      model: env.OPENAI_MODEL?.trim() || "gpt-4o-mini",
+      apiKey: openai,
+    });
   }
-  return null;
+  const deepseek = env.DEEPSEEK_API_KEY?.trim();
+  if (deepseek) {
+    providers.push({
+      name: "deepseek",
+      url: "https://api.deepseek.com/chat/completions",
+      model: env.DEEPSEEK_MODEL?.trim() || "deepseek-chat",
+      apiKey: deepseek,
+    });
+  }
+  return providers;
 }
 
 // ---------- Request validation (server-side) ----------
@@ -117,27 +144,43 @@ export class UpstreamError extends Error {
   }
 }
 
-/**
- * A safe, human-readable reason for an AI provider failure. Contains only the
- * provider's HTTP status category, never keys or raw provider responses.
- */
-export function describeUpstreamFailure(provider: Provider["name"] | undefined, status: number | undefined): string {
-  const name = provider === "openai" ? "OpenAI" : provider === "deepseek" ? "DeepSeek" : "The AI provider";
+/** Short, safe reason for one provider's failure (HTTP status category only). */
+export function shortReason(status: number | undefined): string {
   switch (status) {
     case 401:
     case 403:
-      return `${name} rejected the API key (error ${status}). Check that the key is correct and saved under the right name in Vercel, then redeploy.`;
+      return `API key rejected (error ${status})`;
     case 402:
-      return `${name} says the account is out of credit (error 402). Add balance to the account, then try again.`;
+      return "account out of credit (error 402)";
     case 404:
-      return `${name} couldn't find the AI model (error 404). The key may not have access to this model.`;
+      return "model not found (error 404)";
     case 429:
-      return `${name} usage limit or quota reached (error 429). Check billing/quota on the provider's site, or wait and try again.`;
+      return "usage limit or quota reached (error 429)";
     default:
-      if (status && status >= 500) return `${name} is having problems right now (error ${status}). Please try again shortly.`;
-      return "The Copilot couldn't answer right now. Please try again.";
+      if (status && status >= 500) return `service problem (error ${status})`;
+      return "no response";
   }
 }
+
+export type ProviderFailure = { provider: ProviderName; status?: number };
+
+/**
+ * Message shown when every configured provider failed. Contains only provider
+ * names and status categories, never keys or raw provider responses.
+ */
+export function describeFailures(failures: ProviderFailure[]): string {
+  if (failures.length === 0) return "The Copilot couldn't answer right now. Please try again.";
+  const parts = failures.map((f) => `${PROVIDER_LABEL[f.provider]}: ${shortReason(f.status)}`);
+  return `The Copilot couldn't answer right now. ${parts.join("; ")}.`;
+}
+
+export class AllProvidersFailedError extends Error {
+  constructor(readonly failures: ProviderFailure[]) {
+    super(`All AI providers failed: ${failures.map((f) => `${f.provider}=${f.status ?? "error"}`).join(", ")}`);
+  }
+}
+
+const PER_PROVIDER_TIMEOUT_MS = 20_000;
 
 export async function askCopilot(
   provider: Provider,
@@ -150,14 +193,17 @@ export async function askCopilot(
     body: JSON.stringify({
       model: provider.model,
       temperature: 0.3,
-      max_tokens: 400,
+      max_tokens: 600,
+      // Gemini 2.5 "thinks" by default, which can use up the token budget and return
+      // an empty answer. Short cash-flow answers don't need it.
+      ...(provider.name === "gemini" ? { reasoning_effort: "none" } : {}),
       messages: [
         { role: "system", content: buildSystemPrompt(request.currency) },
         ...request.history,
         { role: "user", content: request.message },
       ],
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(PER_PROVIDER_TIMEOUT_MS),
   });
 
   if (!response.ok) throw new UpstreamError(`AI provider returned ${response.status}`, response.status);
@@ -168,6 +214,31 @@ export async function askCopilot(
       : undefined;
   if (typeof content !== "string" || !content.trim()) throw new UpstreamError("AI provider returned no answer");
   return content.trim();
+}
+
+/**
+ * Tries each provider in order (Gemini, OpenAI, DeepSeek) and returns the first answer.
+ * If one fails (bad key, no credit, quota, outage, timeout), it moves on to the next.
+ */
+export async function askWithFallback(
+  providers: Provider[],
+  request: ChatRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ reply: string; provider: ProviderName }> {
+  const failures: ProviderFailure[] = [];
+  for (const provider of providers) {
+    try {
+      return { reply: await askCopilot(provider, request, fetchImpl), provider: provider.name };
+    } catch (err) {
+      const status = err instanceof UpstreamError ? err.status : undefined;
+      console.error(
+        `[api/chat] ${provider.name} (${provider.model}) failed:`,
+        err instanceof Error ? err.message : err,
+      );
+      failures.push({ provider: provider.name, status });
+    }
+  }
+  throw new AllProvidersFailedError(failures);
 }
 
 // ---------- Basic rate limiting (best-effort, per server instance) ----------

@@ -58,6 +58,7 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 - The rate limit is per server instance. For real traffic, use a shared limiter (e.g. Upstash/Vercel KV) and require login.
 - The AI still answers from mock data.
 - Live test on Vercel failed with DeepSeek error 402 (Insufficient Balance): the DeepSeek account needs credit at platform.deepseek.com. Key and code are fine.
+- UPDATE: three providers with automatic fallback, in order **Gemini (`GEMINI_API_KEY` or `GOOGLE_API_KEY`, model gemini-2.5-flash, thinking off) → OpenAI (`OPENAI_API_KEY`, gpt-4o-mini) → DeepSeek (`DEEPSEEK_API_KEY`, deepseek-chat)**. If one fails (bad key, no credit, quota, outage, timeout) the next is tried. Models can be overridden with `GEMINI_MODEL` / `OPENAI_MODEL` / `DEEPSEEK_MODEL`.
 - Chat errors now explain provider failures in plain words (401/403 key rejected, 402 out of credit, 404 model, 429 quota, 5xx outage). Consider making these more generic for end users before public launch.
 
 **Tests**
