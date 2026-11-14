@@ -168,7 +168,7 @@ export function SettingsForm() {
       }}
     >
       {/* Profile */}
-      <Section icon={UserRound} title="Profile" description="How you appear in MoneyPulse.">
+      <Section icon={UserRound} title="Profile" description="How you appear in CalmOwe.">
         <div className="space-y-5 p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-4">
             <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full border border-zinc-700 bg-gradient-to-br from-zinc-700 to-zinc-800 text-lg font-semibold text-white">
@@ -296,7 +296,7 @@ export function SettingsForm() {
               <div>
                 <p className="text-sm font-medium text-white">Dark Mode</p>
                 <p className="mt-0.5 text-xs text-zinc-500">
-                  {settings.darkMode ? "Use the dark theme across MoneyPulse." : "Light theme is coming soon."}
+                  {settings.darkMode ? "Use the dark theme across CalmOwe." : "Light theme is coming soon."}
                 </p>
               </div>
             </div>
@@ -306,7 +306,7 @@ export function SettingsForm() {
       </Section>
 
       {/* Notifications */}
-      <Section icon={Bell} title="Notifications" description="Choose what MoneyPulse tells you about.">
+      <Section icon={Bell} title="Notifications" description="Choose what CalmOwe tells you about.">
         <ul className="divide-y divide-zinc-800">
           {notificationRows.map(({ key, title, body }) => (
             <li key={key} className="flex items-center justify-between gap-4 p-5 sm:px-6">

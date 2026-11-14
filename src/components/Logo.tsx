@@ -7,7 +7,7 @@ export function Logo({ href = "/" }: { href?: string }) {
       <span className="grid size-7 place-items-center rounded-md bg-white text-zinc-950">
         <Activity className="size-4" strokeWidth={2.5} aria-hidden="true" />
       </span>
-      MoneyPulse
+      CalmOwe
     </Link>
   );
 }

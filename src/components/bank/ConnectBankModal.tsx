@@ -6,8 +6,8 @@ import { EyeOff, KeyRound, Landmark, Lock, ShieldCheck, Unlink, X, type LucideIc
 
 const safetyPoints: { icon: LucideIcon; title: string; body: string }[] = [
   { icon: Lock, title: "Bank-grade encryption", body: "Your data is encrypted in transit and at rest." },
-  { icon: EyeOff, title: "Read-only access", body: "MoneyPulse can view balances and transactions. It can never move money." },
-  { icon: KeyRound, title: "Your login stays private", body: "You sign in with your bank directly. MoneyPulse never sees your password." },
+  { icon: EyeOff, title: "Read-only access", body: "CalmOwe can view balances and transactions. It can never move money." },
+  { icon: KeyRound, title: "Your login stays private", body: "You sign in with your bank directly. CalmOwe never sees your password." },
   { icon: Unlink, title: "Disconnect anytime", body: "Revoke access with one click whenever you want." },
 ];
 
@@ -87,7 +87,7 @@ export function ConnectBankModal({ onClose, onContinue }: { onClose: () => void;
             Connect your bank securely
           </h2>
           <p id="connect-bank-desc" className="mx-auto mt-1.5 max-w-xs text-sm text-zinc-400">
-            Link your account to see real balances and transactions in MoneyPulse.
+            Link your account to see real balances and transactions in CalmOwe.
           </p>
         </div>
 

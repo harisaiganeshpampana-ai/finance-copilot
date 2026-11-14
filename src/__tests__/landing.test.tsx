@@ -16,7 +16,7 @@ describe("Landing page", () => {
   it("has a navigation bar with logo, Features, Security, Login and Get Started", () => {
     render(<Home />);
     const nav = screen.getByRole("navigation", { name: "Main" });
-    for (const name of ["MoneyPulse", "Features", "Security", "Login", "Get Started"]) {
+    for (const name of ["CalmOwe", "Features", "Security", "Login", "Get Started"]) {
       expect(within(nav).getAllByRole("link", { name }).length).toBeGreaterThan(0);
     }
   });

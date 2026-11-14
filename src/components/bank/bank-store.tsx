@@ -8,7 +8,7 @@ import { useCallback, useSyncExternalStore } from "react";
 
 export const DEMO_BANK = { name: "Meridian Bank", account: "Checking", last4: "4821" } as const;
 
-const STORAGE_KEY = "moneypulse.bankConnected";
+const STORAGE_KEY = "calmowe.bankConnected";
 const listeners = new Set<() => void>();
 let memoryFallback = false;
 

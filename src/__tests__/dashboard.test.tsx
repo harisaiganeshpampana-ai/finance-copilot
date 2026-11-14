@@ -42,7 +42,7 @@ describe("Dashboard (/dashboard)", () => {
     expect(within(nav).getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBe("page");
     expect(within(nav).getByRole("link", { name: "Settings" }).getAttribute("href")).toBe("/settings");
     expect(within(nav).getByRole("link", { name: "Settings" }).getAttribute("aria-current")).toBeNull();
-    expect(screen.getByRole("link", { name: "MoneyPulse" }).getAttribute("href")).toBe("/");
+    expect(screen.getByRole("link", { name: "CalmOwe" }).getAttribute("href")).toBe("/");
   });
 
   it("greets the user and shows an account avatar", () => {
@@ -131,7 +131,7 @@ describe("Dashboard (/dashboard)", () => {
   it("remembers the chosen currency", () => {
     renderDashboard();
     chooseCurrency("INR");
-    expect(window.localStorage.getItem("moneypulse.currency")).toBe("INR");
+    expect(window.localStorage.getItem("calmowe.currency")).toBe("INR");
   });
 
   it("contains no emojis (design rule)", () => {

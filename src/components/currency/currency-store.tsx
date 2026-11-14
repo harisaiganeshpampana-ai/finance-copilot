@@ -8,7 +8,7 @@ import { type CurrencyCode, formatUsdCentsAs, isCurrencyCode } from "@/lib/curre
 // calls useCurrency() re-renders instantly when it changes; no reload needed.
 // The choice is remembered in this browser (localStorage) when storage is available.
 
-const STORAGE_KEY = "moneypulse.currency";
+const STORAGE_KEY = "calmowe.currency";
 const DEFAULT_CURRENCY: CurrencyCode = "USD";
 const listeners = new Set<() => void>();
 let memoryFallback: CurrencyCode = DEFAULT_CURRENCY; // used if localStorage is blocked

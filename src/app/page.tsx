@@ -42,7 +42,7 @@ const features: { icon: LucideIcon; title: string; body: string }[] = [
 
 const securityPoints: { icon: LucideIcon; title: string; body: string }[] = [
   { icon: Lock, title: "Encrypted everywhere", body: "Data is encrypted in transit and at rest." },
-  { icon: EyeOff, title: "Read-only access", body: "MoneyPulse can see balances. It can never move money." },
+  { icon: EyeOff, title: "Read-only access", body: "CalmOwe can see balances. It can never move money." },
   { icon: KeyRound, title: "Secrets stay server-side", body: "Keys and tokens never reach the browser." },
   { icon: ServerCog, title: "Validated on the server", body: "Every request is checked before it is processed." },
 ];
@@ -181,7 +181,7 @@ function Hero() {
         </h1>
 
         <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-zinc-400 sm:text-lg">
-          See what&apos;s coming in, what&apos;s going out, and which debt to pay down first. MoneyPulse turns your
+          See what&apos;s coming in, what&apos;s going out, and which debt to pay down first. CalmOwe turns your
           accounts into one clear plan.
         </p>
 
@@ -247,7 +247,7 @@ function Security() {
             Security is the foundation, not a feature.
           </h2>
           <p className="mt-4 max-w-lg text-zinc-400">
-            Your financial data deserves the same care a bank gives it. Every part of MoneyPulse is designed around
+            Your financial data deserves the same care a bank gives it. Every part of CalmOwe is designed around
             least access and strict validation.
           </p>
         </div>
@@ -291,7 +291,7 @@ function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 text-sm text-zinc-500 sm:px-6 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-4">
           <Logo />
-          <span>&copy; 2026 MoneyPulse</span>
+          <span>&copy; 2026 CalmOwe</span>
         </div>
         <nav className="flex gap-6" aria-label="Footer">
           <a href="#features" className="hover:text-zinc-300">
@@ -306,7 +306,7 @@ function Footer() {
         </nav>
       </div>
       <p className="mx-auto max-w-6xl px-4 pb-10 text-xs text-zinc-600 sm:px-6">
-        MoneyPulse provides cash-flow and debt guidance. It does not provide investment advice.
+        CalmOwe provides cash-flow and debt guidance. It does not provide investment advice.
       </p>
     </footer>
   );

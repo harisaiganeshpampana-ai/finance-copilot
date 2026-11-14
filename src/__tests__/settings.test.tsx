@@ -45,9 +45,9 @@ describe("Settings page (/settings)", () => {
     const email = screen.getByLabelText("Email Address") as HTMLInputElement;
     expect(name.value).toBe("Pampana Hari Sai Ganesh");
     fireEvent.change(name, { target: { value: "Hari Ganesh" } });
-    fireEvent.change(email, { target: { value: "hari@moneypulse.app" } });
+    fireEvent.change(email, { target: { value: "hari@calmowe.app" } });
     expect(name.value).toBe("Hari Ganesh");
-    expect(email.value).toBe("hari@moneypulse.app");
+    expect(email.value).toBe("hari@calmowe.app");
     expect(screen.getByText("You have unsaved changes")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Upload" })).toBeTruthy();
   });
@@ -97,7 +97,7 @@ describe("Settings page (/settings)", () => {
     });
     expect(within(group).getByRole("radio", { name: /INR/ }).getAttribute("aria-checked")).toBe("true");
     expect(screen.getByRole("button", { name: /display currency: indian rupee/i })).toBeTruthy();
-    expect(window.localStorage.getItem("moneypulse.currency")).toBe("INR");
+    expect(window.localStorage.getItem("calmowe.currency")).toBe("INR");
   });
 
   it("saves valid changes and shows a success toast", async () => {

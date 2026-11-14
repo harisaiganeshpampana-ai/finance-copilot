@@ -14,11 +14,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "MoneyPulse — Cash flow and debt, under control",
-    template: "%s · MoneyPulse",
+    default: "CalmOwe — Cash flow and debt, under control",
+    template: "%s · CalmOwe",
   },
   description:
-    "MoneyPulse shows where your money goes, what's coming up, and which debt to pay down first.",
+    "CalmOwe shows where your money goes, what's coming up, and which debt to pay down first.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

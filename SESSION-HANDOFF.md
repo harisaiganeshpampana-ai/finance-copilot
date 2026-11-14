@@ -34,6 +34,29 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 8: Name chosen: CalmOwe
+
+**Goal for today**
+- Pick a product name with an available .com and rename the app.
+
+**What got done**
+- Checked ~190 candidate names against the Verisign .com registry (RDAP). Chose **CalmOwe**; calmowe.com was unregistered on 2026-11-14.
+- Renamed MoneyPulse to CalmOwe everywhere in the app: logo, page titles, landing copy, settings text, Connect Bank modal, footer, tests.
+- Browser storage keys renamed (`calmowe.currency`, `calmowe.bankConnected`), so a previously saved currency/bank demo state resets once.
+
+**What's in progress (not finished)**
+- Nothing.
+
+**Blockers / decisions needed**
+- REGISTER calmowe.com soon (not purchased; availability can change any time).
+- Trademark search for "CalmOwe" (USPTO, ipindia.gov.in) before building the brand.
+- Check social handles (X, Instagram, LinkedIn).
+- Optional: rename the GitHub repo/folder from `finance-copilot` to `calmowe`.
+
+**Tests**
+- [x] `npm test` passes
+- [x] `npm run build` passes
+
 ### 2026-11-13 — Day 7: Connect Bank UI (demo)
 
 **Goal for today**

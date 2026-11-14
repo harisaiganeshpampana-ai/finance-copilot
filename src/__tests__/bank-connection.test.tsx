@@ -76,7 +76,7 @@ describe("Connect Bank flow", () => {
     expect(sidebar().getByText("Synced")).toBeTruthy();
     expect(sidebar().queryByRole("button", { name: "Connect Bank" })).toBeNull();
     expect(screen.getByTestId("data-source-pill").textContent).toBe("Live Data");
-    expect(window.localStorage.getItem("moneypulse.bankConnected")).toBe("true");
+    expect(window.localStorage.getItem("calmowe.bankConnected")).toBe("true");
   });
 
   it("can disconnect and go back to Demo data", () => {

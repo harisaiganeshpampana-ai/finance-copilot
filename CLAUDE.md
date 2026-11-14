@@ -1,4 +1,6 @@
-# Finance Copilot — Project Rules
+# CalmOwe (Finance Copilot) — Project Rules
+
+Product name: **CalmOwe** (domain to register: calmowe.com). The repo/folder is still named `finance-copilot`.
 
 These rules are non-negotiable. Follow them in every change.
 
