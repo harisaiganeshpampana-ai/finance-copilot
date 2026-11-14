@@ -53,7 +53,9 @@ export const PLANS: Plan[] = [
   },
 ];
 
-function checkoutSoon(plan: string) {
+export type PlanId = Plan["id"];
+
+export function checkoutSoon(plan: string) {
   toast("Checkout coming soon", { description: `${plan} subscriptions open shortly. Nothing has been charged.` });
 }
 

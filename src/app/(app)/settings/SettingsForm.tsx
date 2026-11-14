@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Bell, Check, Loader2, Moon, SlidersHorizontal, Trash2, TriangleAlert, Upload, UserRound } from "lucide-react";
+import { Bell, Check, CreditCard, Loader2, Moon, SlidersHorizontal, Trash2, TriangleAlert, Upload, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { useCurrency } from "@/components/currency/currency-store";
 import { Switch } from "@/components/ui/Switch";
@@ -9,6 +9,7 @@ import { mockUser } from "@/data/mockUser";
 import { CURRENCY_CODES, CURRENCY_INFO } from "@/lib/currency";
 import { EMAIL_MAX, FULL_NAME_MAX, type SettingsField, type SettingsInput } from "@/lib/validation/settings";
 import { saveSettings } from "./actions";
+import { BillingSection } from "./BillingSection";
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 const AVATAR_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
@@ -53,14 +54,16 @@ function Section({
   tone?: "default" | "danger";
 }) {
   const danger = tone === "danger";
+  // IDs can't contain spaces (aria-labelledby treats spaces as separators).
+  const headingId = `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-heading`;
   return (
     <section
-      aria-labelledby={`${title}-heading`}
+      aria-labelledby={headingId}
       className="grid gap-4 border-t border-zinc-800/80 py-8 first:border-t-0 first:pt-0 lg:grid-cols-[260px_1fr] lg:gap-10"
     >
       <div>
         <h3
-          id={`${title}-heading`}
+          id={headingId}
           className={`flex items-center gap-2 text-sm font-medium ${danger ? "text-rose-400" : "text-white"}`}
         >
           <Icon className="size-4" aria-hidden="true" />
@@ -246,6 +249,11 @@ export function SettingsForm() {
             </Field>
           </div>
         </div>
+      </Section>
+
+      {/* Plan and billing */}
+      <Section icon={CreditCard} title="Plan and billing" description="Your current plan and upgrade options.">
+        <BillingSection currentPlan={mockUser.plan} />
       </Section>
 
       {/* Preferences */}

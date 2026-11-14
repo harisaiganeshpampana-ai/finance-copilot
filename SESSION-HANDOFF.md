@@ -34,6 +34,13 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 14b: Pricing inside Settings
+
+**What got done**
+- New "Plan and billing" section in `/settings` (`src/app/(app)/settings/BillingSection.tsx`): current plan (Basic, free; mock `mockUser.plan`), the three plans with prices in the selected currency, "Upgrade to Pro" / "Contact sales" buttons (show "Checkout coming soon"), and a "Compare all plans" link to `/pricing`. Uses the same plan data as the pricing page.
+- Fixed an accessibility bug: Settings section heading IDs contained spaces, so screen readers couldn't announce section names. Now slugified.
+- Tests added to `settings.test.tsx`. 173 tests total.
+
 ### 2026-11-14 — Day 14: Pricing and legal pages
 
 **Goal for today**

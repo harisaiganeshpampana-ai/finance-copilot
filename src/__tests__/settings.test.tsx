@@ -34,9 +34,37 @@ describe("Settings page (/settings)", () => {
 
   it("shows all sections", () => {
     renderSettings();
-    for (const name of ["Profile", "Preferences", "Notifications", "Danger Zone"]) {
+    for (const name of ["Profile", "Plan and billing", "Preferences", "Notifications", "Danger Zone"]) {
       expect(screen.getByRole("heading", { level: 3, name })).toBeTruthy();
+      // Each section is a landmark labelled by its heading (ids must not contain spaces).
+      expect(screen.getByRole("region", { name })).toBeTruthy();
     }
+  });
+
+  it("shows the current plan and all three plans with upgrade options", () => {
+    renderSettings();
+    const billing = within(screen.getByRole("region", { name: "Plan and billing" }));
+    expect(billing.getByTestId("current-plan").textContent).toContain("Basic");
+    expect(billing.getByRole("group", { name: "Basic plan" }).textContent).toContain("Current plan");
+    expect(billing.getByTestId("settings-price-pro").textContent).toBe("$9/mo");
+    expect(billing.getByTestId("settings-price-enterprise").textContent).toBe("Custom");
+    expect(billing.getByRole("button", { name: "Upgrade to Pro" })).toBeTruthy();
+    expect(billing.getByRole("button", { name: "Contact sales" })).toBeTruthy();
+    expect(billing.getByRole("link", { name: /compare all plans/i }).getAttribute("href")).toBe("/pricing");
+  });
+
+  it("upgrade buttons show 'Checkout coming soon'", async () => {
+    renderSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade to Pro" }));
+    expect(await screen.findByText("Checkout coming soon")).toBeTruthy();
+  });
+
+  it("plan prices follow the selected currency (₹499)", () => {
+    renderSettings();
+    act(() => {
+      fireEvent.click(within(screen.getByRole("radiogroup", { name: "Base Currency" })).getByRole("radio", { name: /INR/ }));
+    });
+    expect(screen.getByTestId("settings-price-pro").textContent).toBe("₹499/mo");
   });
 
   it("has editable profile fields and an Upload button", () => {
