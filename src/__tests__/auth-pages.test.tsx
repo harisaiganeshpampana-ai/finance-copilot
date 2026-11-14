@@ -17,7 +17,11 @@ import { signIn, signOut } from "next-auth/react";
 import LoginPage from "@/app/(auth)/login/page";
 import SignupPage from "@/app/(auth)/signup/page";
 import AppLayout from "@/app/(app)/layout";
-import Dashboard from "@/app/(app)/dashboard/page";
+import { DashboardView } from "@/components/dashboard/DashboardView";
+import { MOCK_FINANCIAL_DATA } from "@/data/mockTransactions";
+
+// The dashboard as it renders for a user whose data is the original mock data.
+const Dashboard = () => <DashboardView data={MOCK_FINANCIAL_DATA} />;
 
 beforeAll(installBrowserStubs);
 beforeEach(() => {

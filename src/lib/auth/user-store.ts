@@ -20,16 +20,22 @@ export const mongoUserStore: UserStore = {
 
   async upsertOAuthUser({ name, email, image, provider }) {
     await connectToDatabase();
-    // Create on first Google sign-in; for an existing account (e.g. email/password),
-    // keep its name and password and only fill in a missing profile picture.
-    const doc = await User.findOneAndUpdate(
-      { email },
-      {
-        $setOnInsert: { name, email, provider },
-        ...(image ? { $set: { image } } : {}),
-      },
-      { upsert: true, new: true },
-    ).lean();
-    return { id: String(doc!._id), name: doc!.name, email: doc!.email };
+    // Existing account (e.g. email/password): keep its name and password; refresh the picture.
+    const existing = await User.findOne({ email }).lean();
+    if (existing) {
+      if (image && existing.image !== image) await User.updateOne({ _id: existing._id }, { $set: { image } });
+      return { id: String(existing._id), name: existing.name, email: existing.email, created: false };
+    }
+    try {
+      const doc = await User.create({ name, email, provider, ...(image ? { image } : {}) });
+      return { id: String(doc._id), name: doc.name, email: doc.email, created: true };
+    } catch (err) {
+      // Two first-time sign-ins at the same moment: the other one created it.
+      if ((err as { code?: number }).code === 11000) {
+        const doc = await User.findOne({ email }).lean();
+        if (doc) return { id: String(doc._id), name: doc.name, email: doc.email, created: false };
+      }
+      throw err;
+    }
   },
 };

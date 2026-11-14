@@ -6,7 +6,11 @@ import { installBrowserStubs } from "./test-setup";
 vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard" }));
 
 import DashboardLayout from "@/app/(app)/layout";
-import Dashboard from "@/app/(app)/dashboard/page";
+import { DashboardView } from "@/components/dashboard/DashboardView";
+import { MOCK_FINANCIAL_DATA } from "@/data/mockTransactions";
+
+// The dashboard as it renders for a user whose data is the original mock data.
+const Dashboard = () => <DashboardView data={MOCK_FINANCIAL_DATA} />;
 import { resetCurrencyForTests } from "@/components/currency/currency-store";
 
 beforeAll(installBrowserStubs);

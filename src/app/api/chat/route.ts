@@ -1,4 +1,6 @@
+import type { FinancialData } from "@/data/mockTransactions";
 import { getCurrentUser } from "@/lib/auth/session";
+import { getFinancialData } from "@/lib/server/transactions";
 import {
   AllProvidersFailedError,
   askWithFallback,
@@ -40,8 +42,17 @@ export async function POST(request: Request) {
     return Response.json({ error: "The Copilot isn't configured yet." }, { status: 503 });
   }
 
+  // Only this user's transactions are loaded (by the id in their signed session) and sent to the AI.
+  let financial: FinancialData;
   try {
-    const { reply } = await askWithFallback(providers, parsed.data);
+    financial = await getFinancialData(user.id);
+  } catch (err) {
+    console.error("[api/chat] Could not load user data:", err instanceof Error ? err.message : err);
+    return Response.json({ error: "Couldn't load your financial data. Please try again." }, { status: 503 });
+  }
+
+  try {
+    const { reply } = await askWithFallback(providers, { ...parsed.data, financial });
     return Response.json({ reply });
   } catch (err) {
     // Details are logged per provider on the server. The browser only gets provider

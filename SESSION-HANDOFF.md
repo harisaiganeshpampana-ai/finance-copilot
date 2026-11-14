@@ -34,6 +34,30 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 17: Multi-user data in MongoDB
+
+**Goal for today**
+- Each logged-in user sees their own data on the dashboard and in the AI Copilot.
+
+**What got done**
+- `Transaction` model (`src/models/Transaction.ts`): userId (indexed), merchant, amountCents (positive whole cents), type (income/expense), category, date, source ("sample" now; "bank" later). User model gains `openingBalanceCents`.
+- Session now carries the MongoDB user id (`session.user.id`, typed in `src/types/next-auth.d.ts`); `getCurrentUser()` returns it.
+- Data layer `src/lib/server/transactions.ts` (+ Mongo store in `transaction-store.ts`): `getFinancialData(userId)` and `seedSampleData(userId)`. Every query filters by userId; ids are validated.
+- Sample data: new users (email or Google) automatically get the 10 sample transactions, dated relative to their sign-up day, plus the sample opening balance. Existing users with no data see an empty dashboard with "Generate sample data" (server action; uses the session user, never creates duplicates).
+- `/dashboard` loads the user's data from MongoDB inside `<Suspense>` (partial prerender: frame instantly, data streams). Balance, income, expenses, chart and table are calculated from the database. Loading skeleton, empty state and error state added. UI moved into `DashboardView`.
+- `/api/chat` loads the logged-in user's transactions from MongoDB and sends only those to the AI. The prompt handles users with no data.
+- Fixed: the session helper's error handling was swallowing Next.js's internal prerender signal; now uses `unstable_rethrow`.
+- Tests: `transactions.test.ts`, `dashboard-data.test.tsx`, route isolation tests, seeding-on-sign-up tests. 264 tests total.
+
+**Blockers / decisions needed**
+- Your own account (created before today) has no transactions: open the dashboard and click "Generate sample data".
+- The landing page preview still shows the original mock numbers (marketing only).
+- Next: real bank data (source "bank"), and a way to add/edit transactions.
+
+**Tests**
+- [x] `npm test` passes (264)
+- [x] `npm run build` passes
+
 ### 2026-11-14 — Day 16: Continue with Google
 
 **What got done**

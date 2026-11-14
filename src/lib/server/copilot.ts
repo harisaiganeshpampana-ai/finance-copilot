@@ -1,12 +1,7 @@
 // SERVER-ONLY. Do not import this file from client components ("use client").
 // It reads AI provider API keys from process.env; they must never reach the browser.
 
-import {
-  MOCK_AS_OF,
-  MOCK_EXCHANGE_RATES,
-  MOCK_OPENING_BALANCE_CENTS,
-  mockTransactions,
-} from "@/data/mockTransactions";
+import { type FinancialData, MOCK_EXCHANGE_RATES } from "@/data/mockTransactions";
 import { convertUsdCents, type CurrencyCode, formatMinorUnits, isCurrencyCode } from "@/lib/currency";
 import { convertAmount, currencyHints, findAmounts } from "@/lib/currency-hints";
 import { dailySpending, estimateUpcomingBills, monthTotals, totalBalanceCents } from "@/lib/insights";
@@ -63,6 +58,8 @@ export const MAX_HISTORY_CHARS = 2000;
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 export type ChatRequest = { message: string; history: ChatTurn[]; currency: CurrencyCode };
+/** A validated question plus the logged-in user's financial data (loaded on the server). */
+export type CopilotQuery = ChatRequest & { financial: FinancialData };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -109,21 +106,23 @@ export type FinancialContext = ReturnType<typeof buildFinancialContext>;
  * Structured financial data for the AI, built on the server from our own data (never from
  * the browser). All totals are calculated here, so the AI never has to add up transactions.
  */
-export function buildFinancialContext() {
-  const { incomeCents, expensesCents } = monthTotals(mockTransactions, MOCK_AS_OF);
-  const balanceCents = totalBalanceCents(MOCK_OPENING_BALANCE_CENTS, mockTransactions);
-  const upcoming = estimateUpcomingBills(mockTransactions, MOCK_AS_OF, 30);
+export function buildFinancialContext(data: FinancialData) {
+  const { transactions, openingBalanceCents, asOf } = data;
+  const { incomeCents, expensesCents } = monthTotals(transactions, asOf);
+  const balanceCents = totalBalanceCents(openingBalanceCents, transactions);
+  const upcoming = estimateUpcomingBills(transactions, asOf, 30);
   const upcomingCents = upcoming.reduce((sum, b) => sum + b.amountCents, 0);
   return {
-    asOf: MOCK_AS_OF,
+    asOf,
+    transactionCount: transactions.length,
     currency: "USD",
     summary: {
       currentBalance: dollars(balanceCents),
       totalIncome: dollars(incomeCents),
       totalExpenses: dollars(expensesCents),
       netCashFlow: dollars(incomeCents - expensesCents),
-      openingBalance: dollars(MOCK_OPENING_BALANCE_CENTS),
-      period: `${MOCK_AS_OF.slice(0, 7)}-01 to ${MOCK_AS_OF}`,
+      openingBalance: dollars(openingBalanceCents),
+      period: `${asOf.slice(0, 7)}-01 to ${asOf}`,
     },
     upcomingExpenses: {
       note: "Estimated from recurring bills (rent, utilities, subscriptions) repeating monthly; next 30 days.",
@@ -136,11 +135,11 @@ export function buildFinancialContext() {
       total: dollars(upcomingCents),
     },
     balanceAfterUpcomingExpenses: dollars(balanceCents - upcomingCents),
-    spendingLast7Days: dailySpending(mockTransactions, MOCK_AS_OF, 7).map((d) => ({
+    spendingLast7Days: dailySpending(transactions, asOf, 7).map((d) => ({
       date: d.date,
       spent: dollars(d.spendingCents),
     })),
-    transactions: mockTransactions.map((t) => ({
+    transactions: transactions.map((t) => ({
       date: t.date,
       merchant: t.merchant,
       category: t.category,
@@ -150,7 +149,7 @@ export function buildFinancialContext() {
 }
 
 /** The context as a clean, readable JSON string. */
-export function formatFinancialContext(context: FinancialContext = buildFinancialContext()): string {
+export function formatFinancialContext(context: FinancialContext): string {
   return JSON.stringify(context, null, 2);
 }
 
@@ -163,6 +162,7 @@ export function buildSystemPrompt(currency: CurrencyCode): string {
     "Use the totals in the summary as given; do not re-add transactions.",
     "Do not provide investment advice. Do not recommend buying, selling, or holding any stock, fund, ETF, bond, crypto, or other security, or suggest where to invest. If asked, briefly say you only help with cash flow and debt, then offer a related cash-flow or debt answer.",
     "You are not a licensed financial advisor; for major decisions, suggest consulting one.",
+    "If transactionCount is 0, say there is no transaction data yet and suggest connecting a bank account or generating sample data from the dashboard. Do not guess.",
     `Show money amounts in ${currency}. All amounts in the data are USD; convert at 1 USD = ${rate} ${currency} (fixed demo rate).`,
     "Read currency symbols carefully: ₹ or Rs means Indian rupees (INR), $ means US dollars, € means euros, £ means pounds. Never treat a rupee amount as dollars.",
     "When the message includes 'Exact figures computed by CalmOwe', use those figures exactly. Do not do your own arithmetic on them.",
@@ -178,13 +178,13 @@ export function buildSystemPrompt(currency: CurrencyCode): string {
  * upcoming expenses too, in the display currency. Language models are unreliable at
  * arithmetic, so the server does the math and the AI explains it.
  */
-export function affordabilityNotes(question: string, currency: CurrencyCode): string[] {
+export function affordabilityNotes(question: string, currency: CurrencyCode, data: FinancialData): string[] {
   // All math happens in the display currency's minor units (e.g. paise), converting each
   // amount once, so there are no USD round-trip rounding errors (₹5,000 stays ₹5,000.00).
   const toDisplay = (usdCents: number) => convertUsdCents(usdCents, currency, MOCK_EXCHANGE_RATES);
   const fmt = (minor: number) => formatMinorUnits(minor, currency);
-  const balance = toDisplay(totalBalanceCents(MOCK_OPENING_BALANCE_CENTS, mockTransactions));
-  const upcoming = toDisplay(estimateUpcomingBills(mockTransactions, MOCK_AS_OF, 30).reduce((s, b) => s + b.amountCents, 0));
+  const balance = toDisplay(totalBalanceCents(data.openingBalanceCents, data.transactions));
+  const upcoming = toDisplay(estimateUpcomingBills(data.transactions, data.asOf, 30).reduce((s, b) => s + b.amountCents, 0));
   return findAmounts(question).map(({ text, amount, currency: from }) => {
     const cost = convertAmount(amount, from, currency, MOCK_EXCHANGE_RATES);
     const afterPurchase = balance - cost;
@@ -202,9 +202,9 @@ export function affordabilityNotes(question: string, currency: CurrencyCode): st
  * server-computed figures (currency conversions and affordability math) when the
  * question mentions money amounts.
  */
-export function buildUserPrompt(question: string, currency: CurrencyCode): string {
-  const prompt = `Here is my current financial data:\n${formatFinancialContext()}\n\nMy question is: ${question}`;
-  const figures = [...currencyHints(question, currency, MOCK_EXCHANGE_RATES), ...affordabilityNotes(question, currency)];
+export function buildUserPrompt(question: string, currency: CurrencyCode, data: FinancialData): string {
+  const prompt = `Here is my current financial data:\n${formatFinancialContext(buildFinancialContext(data))}\n\nMy question is: ${question}`;
+  const figures = [...currencyHints(question, currency, MOCK_EXCHANGE_RATES), ...affordabilityNotes(question, currency, data)];
   if (figures.length === 0) return prompt;
   return `${prompt}\n\n[Exact figures computed by CalmOwe; use these exactly and do not recalculate: ${figures.join(" ")}]`;
 }
@@ -260,7 +260,7 @@ const PER_PROVIDER_TIMEOUT_MS = 20_000;
 
 export async function askCopilot(
   provider: Provider,
-  request: ChatRequest,
+  request: CopilotQuery,
   fetchImpl: typeof fetch = fetch,
 ): Promise<string> {
   const response = await fetchImpl(provider.url, {
@@ -276,7 +276,7 @@ export async function askCopilot(
       messages: [
         { role: "system", content: buildSystemPrompt(request.currency) },
         ...request.history,
-        { role: "user", content: buildUserPrompt(request.message, request.currency) },
+        { role: "user", content: buildUserPrompt(request.message, request.currency, request.financial) },
       ],
     }),
     signal: AbortSignal.timeout(PER_PROVIDER_TIMEOUT_MS),
@@ -298,7 +298,7 @@ export async function askCopilot(
  */
 export async function askWithFallback(
   providers: Provider[],
-  request: ChatRequest,
+  request: CopilotQuery,
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ reply: string; provider: ProviderName }> {
   const failures: ProviderFailure[] = [];

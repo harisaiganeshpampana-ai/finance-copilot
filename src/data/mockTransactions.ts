@@ -51,3 +51,39 @@ export const mockTransactions: Transaction[] = [
   { id: "t9", date: "2026-11-01", merchant: "Oakwood Apartments Rent", category: "housing", amountCents: -145000 },
   { id: "t10", date: "2026-11-01", merchant: "Freelance Client Payment", category: "income", amountCents: 60000 },
 ];
+
+// ---------- Per-user financial data ----------
+
+/** Everything the dashboard and the AI Copilot need for one user. */
+export type FinancialData = {
+  transactions: Transaction[];
+  openingBalanceCents: number;
+  /** "Today" for calculations (YYYY-MM-DD). */
+  asOf: string;
+};
+
+/** The original mock data as FinancialData (used in tests and the landing page preview). */
+export const MOCK_FINANCIAL_DATA: FinancialData = {
+  transactions: mockTransactions,
+  openingBalanceCents: MOCK_OPENING_BALANCE_CENTS,
+  asOf: MOCK_AS_OF,
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const utc = (iso: string) => Date.parse(`${iso}T00:00:00Z`);
+
+/**
+ * The 10 sample transactions, re-dated so the most recent falls on `asOf` and the rest keep
+ * the same spacing as the original mock data (so "last 7 days" and "this month" look realistic
+ * for whenever a user signs up).
+ */
+export function buildSampleTransactions(asOf: string): Omit<Transaction, "id">[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf) || Number.isNaN(utc(asOf))) throw new Error(`Invalid date: ${asOf}`);
+  const shift = utc(asOf) - utc(MOCK_AS_OF);
+  return mockTransactions.map(({ merchant, category, amountCents, date }) => ({
+    merchant,
+    category,
+    amountCents,
+    date: new Date(utc(date) + Math.round(shift / DAY_MS) * DAY_MS).toISOString().slice(0, 10),
+  }));
+}

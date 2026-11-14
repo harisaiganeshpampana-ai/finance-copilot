@@ -19,6 +19,9 @@ import { parseLoginCredentials, validateSignup } from "@/lib/auth/validation";
 import { connectToDatabase, DatabaseNotConfiguredError } from "@/lib/server/db";
 
 /** In-memory user store standing in for MongoDB. */
+/** Stand-in for sample-data seeding (tested in transactions tests). */
+const noSeed = vi.fn<(userId: string) => Promise<void>>(async () => {});
+
 function memoryStore(initial: StoredUser[] = []) {
   const users = [...initial];
   const store: UserStore = {
@@ -30,10 +33,10 @@ function memoryStore(initial: StoredUser[] = []) {
     }),
     upsertOAuthUser: vi.fn(async ({ name, email }) => {
       const existing = users.find((u) => u.email === email);
-      if (existing) return { id: existing.id, name: existing.name, email: existing.email };
+      if (existing) return { id: existing.id, name: existing.name, email: existing.email, created: false };
       const user = { id: `u${users.length + 1}`, name, email, passwordHash: null };
       users.push(user);
-      return { id: user.id, name, email };
+      return { id: user.id, name, email , created: true };
     }),
   };
   return { store, users };
@@ -99,7 +102,7 @@ describe("password hashing (bcryptjs)", () => {
 describe("registerUser", () => {
   it("hashes the password before saving and never returns it", async () => {
     const { store, users } = memoryStore();
-    const result = await registerUser({ name: "Hari", email: "Hari@Example.com", password: "calmowe123" }, store);
+    const result = await registerUser({ name: "Hari", email: "Hari@Example.com", password: "calmowe123" }, store, noSeed);
     expect(result).toEqual({ ok: true, user: { id: "u1", name: "Hari", email: "hari@example.com" } });
     expect(users[0].passwordHash).not.toBe("calmowe123");
     expect(await verifyPassword("calmowe123", users[0].passwordHash!)).toBe(true);
@@ -108,7 +111,7 @@ describe("registerUser", () => {
 
   it("rejects a duplicate email", async () => {
     const { store } = memoryStore([{ id: "u1", name: "Hari", email: "hari@example.com", passwordHash: "x" }]);
-    const result = await registerUser({ name: "Other", email: "hari@example.com", password: "calmowe123" }, store);
+    const result = await registerUser({ name: "Other", email: "hari@example.com", password: "calmowe123" }, store, noSeed);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors.email).toMatch(/already exists/);
     expect(store.create).not.toHaveBeenCalled();
@@ -116,7 +119,7 @@ describe("registerUser", () => {
 
   it("does not touch the database when input is invalid", async () => {
     const { store } = memoryStore();
-    expect((await registerUser({ name: "", email: "x", password: "1" }, store)).ok).toBe(false);
+    expect((await registerUser({ name: "", email: "x", password: "1" }, store, noSeed)).ok).toBe(false);
     expect(store.findByEmail).not.toHaveBeenCalled();
   });
 
@@ -128,9 +131,9 @@ describe("registerUser", () => {
         throw new DatabaseNotConfiguredError();
       },
       create: async () => ({ id: "", name: "", email: "" }),
-      upsertOAuthUser: async () => ({ id: "", name: "", email: "" }),
+      upsertOAuthUser: async () => ({ id: "", name: "", email: "", created: false }),
     };
-    const r1 = await registerUser(input, notConfigured);
+    const r1 = await registerUser(input, notConfigured, noSeed);
     expect(r1.ok === false && r1.errors.form).toMatch(/isn't available yet/);
 
     const race: UserStore = {
@@ -138,9 +141,9 @@ describe("registerUser", () => {
       create: async () => {
         throw Object.assign(new Error("E11000 duplicate key"), { code: 11000 });
       },
-      upsertOAuthUser: async () => ({ id: "", name: "", email: "" }),
+      upsertOAuthUser: async () => ({ id: "", name: "", email: "", created: false }),
     };
-    const r2 = await registerUser(input, race);
+    const r2 = await registerUser(input, race, noSeed);
     expect(r2.ok === false && r2.errors.email).toMatch(/already exists/);
   });
 });

@@ -12,6 +12,8 @@ const UserSchema = new Schema(
     // How the account was first created.
     provider: { type: String, enum: ["credentials", "google"], default: "credentials" },
     image: { type: String, maxlength: 2048 },
+    // Account balance (whole cents) before the user's transactions; set by sample data.
+    openingBalanceCents: { type: Number, default: 0, validate: Number.isSafeInteger },
   },
   { timestamps: true },
 );

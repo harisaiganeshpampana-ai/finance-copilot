@@ -12,14 +12,30 @@ export type PublicUser = { id: string; name: string; email: string };
 export type UserStore = {
   findByEmail(email: string): Promise<StoredUser | null>;
   create(user: { name: string; email: string; passwordHash: string }): Promise<PublicUser>;
-  /** Find the account for a verified Google email, or create one. Never touches an existing password. */
-  upsertOAuthUser(user: { name: string; email: string; image?: string | null; provider: "google" }): Promise<PublicUser>;
+  /**
+   * Find the account for a verified Google email, or create one. Never touches an existing
+   * password. `created` is true when a new account was made.
+   */
+  upsertOAuthUser(user: {
+    name: string;
+    email: string;
+    image?: string | null;
+    provider: "google";
+  }): Promise<PublicUser & { created: boolean }>;
 };
+
+/** Runs after a brand-new account is created (gives the user sample data). Must not throw. */
+export type OnUserCreated = (userId: string) => Promise<void>;
 
 async function defaultStore(): Promise<UserStore> {
   const { mongoUserStore } = await import("@/lib/auth/user-store");
   return mongoUserStore;
 }
+
+const defaultOnUserCreated: OnUserCreated = async (userId) => {
+  const { seedSampleDataSafely } = await import("@/lib/server/transactions");
+  await seedSampleDataSafely(userId);
+};
 
 // ---------- Log-in ----------
 
@@ -62,7 +78,11 @@ export type RegisterResult =
   | { ok: true; user: PublicUser }
   | { ok: false; errors: Partial<Record<SignupField, string>> };
 
-export async function registerUser(input: unknown, store?: UserStore): Promise<RegisterResult> {
+export async function registerUser(
+  input: unknown,
+  store?: UserStore,
+  onUserCreated: OnUserCreated = defaultOnUserCreated,
+): Promise<RegisterResult> {
   const parsed = validateSignup(input);
   if (!parsed.ok) return parsed;
   const { name, email, password } = parsed.data;
@@ -81,6 +101,7 @@ export async function registerUser(input: unknown, store?: UserStore): Promise<R
       };
     }
     const user = await users.create({ name, email, passwordHash: await hashPassword(password) });
+    await onUserCreated(user.id);
     return { ok: true, user };
   } catch (err) {
     if (err instanceof DatabaseNotConfiguredError) {
@@ -106,7 +127,11 @@ export type OAuthProfile = { email?: string | null; email_verified?: boolean | n
  * is found or created in MongoDB; an existing email/password account is linked by email.
  * Returns the CalmOwe user, or null to deny sign-in.
  */
-export async function handleGoogleSignIn(profile: OAuthProfile | undefined, store?: UserStore): Promise<PublicUser | null> {
+export async function handleGoogleSignIn(
+  profile: OAuthProfile | undefined,
+  store?: UserStore,
+  onUserCreated: OnUserCreated = defaultOnUserCreated,
+): Promise<PublicUser | null> {
   const email = typeof profile?.email === "string" ? profile.email.trim().toLowerCase() : "";
   if (!email || profile?.email_verified !== true) return null;
   const name = (typeof profile?.name === "string" && profile.name.trim().slice(0, 100)) || email.split("@")[0];
@@ -114,7 +139,9 @@ export async function handleGoogleSignIn(profile: OAuthProfile | undefined, stor
 
   try {
     const users = store ?? (await defaultStore());
-    return await users.upsertOAuthUser({ name, email, image, provider: "google" });
+    const { created, ...user } = await users.upsertOAuthUser({ name, email, image, provider: "google" });
+    if (created) await onUserCreated(user.id);
+    return user;
   } catch (err) {
     console.error("[auth] Google sign-in could not save user:", err instanceof Error ? err.message : err);
     return null;

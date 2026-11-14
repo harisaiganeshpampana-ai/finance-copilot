@@ -57,5 +57,10 @@ export const authOptions: NextAuthOptions = {
       }
       return token;
     },
+    session({ session, token }) {
+      // Expose the user id (from the signed token) to server code.
+      if (session.user && token.sub) session.user.id = token.sub;
+      return session;
+    },
   },
 };

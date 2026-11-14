@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const sessionMock = vi.hoisted(() => ({
-  getCurrentUser: vi.fn<() => Promise<{ name?: string; email?: string } | null>>(),
+  getCurrentUser: vi.fn<() => Promise<{ id: string; name?: string; email?: string } | null>>(),
 }));
 vi.mock("@/lib/auth/session", () => sessionMock);
 
+// The logged-in user's data, as it would come from MongoDB.
+const dataMock = vi.hoisted(() => ({ getFinancialData: vi.fn() }));
+vi.mock("@/lib/server/transactions", () => dataMock);
+
 import { POST } from "@/app/api/chat/route";
+import { MOCK_FINANCIAL_DATA } from "@/data/mockTransactions";
 import { getProviders, MAX_REQUESTS_PER_WINDOW, resetRateLimitForTests } from "@/lib/server/copilot";
 
 const GEMINI_KEY = "gm-test-not-real";
@@ -47,7 +52,8 @@ const setKeys = (keys: { gemini?: string; openai?: string; deepseek?: string }) 
 };
 
 beforeEach(() => {
-  sessionMock.getCurrentUser.mockResolvedValue({ name: "Hari", email: "hari@example.com" });
+  sessionMock.getCurrentUser.mockResolvedValue({ id: "64b000000000000000000001", name: "Hari", email: "hari@example.com" });
+  dataMock.getFinancialData.mockResolvedValue(MOCK_FINANCIAL_DATA);
   resetRateLimitForTests();
   setKeys({ gemini: GEMINI_KEY, openai: OPENAI_KEY, deepseek: DEEPSEEK_KEY });
   fetchMock = vi.fn(async () => aiResponse("Yes. You have about $14,900, so a $300 phone is affordable."));
@@ -81,6 +87,36 @@ describe("provider order", () => {
 });
 
 describe("POST /api/chat", () => {
+  it("loads the logged-in user's own transactions from the database and sends them to the AI", async () => {
+    await chat({ message: "What did I spend?" });
+    expect(dataMock.getFinancialData).toHaveBeenCalledWith("64b000000000000000000001");
+    const userTurn: string = sentBody().messages.at(-1).content;
+    expect(userTurn).toContain("Acme Corp Payroll");
+  });
+
+  it("each user's AI request uses only that user's data", async () => {
+    sessionMock.getCurrentUser.mockResolvedValueOnce({ id: "64b000000000000000000002", name: "Asha" });
+    dataMock.getFinancialData.mockResolvedValueOnce({
+      transactions: [{ id: "x", date: "2026-11-10", merchant: "Asha Bakery", category: "income", amountCents: 50000 }],
+      openingBalanceCents: 0,
+      asOf: "2026-11-10",
+    });
+    await chat({ message: "What's my balance?" });
+    expect(dataMock.getFinancialData).toHaveBeenCalledWith("64b000000000000000000002");
+    const userTurn: string = sentBody().messages.at(-1).content;
+    expect(userTurn).toContain("Asha Bakery");
+    expect(userTurn).not.toContain("Acme Corp Payroll");
+    expect(userTurn).toContain('"currentBalance": 500');
+  });
+
+  it("returns 503 (and doesn't call the AI) if the user's data can't be loaded", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    dataMock.getFinancialData.mockRejectedValueOnce(new Error("db down"));
+    const res = await chat({ message: "Hi" });
+    expect(res.status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("rejects requests without a login (401) and never calls the AI", async () => {
     sessionMock.getCurrentUser.mockResolvedValueOnce(null);
     const res = await chat({ message: "Can I afford a $300 phone?" });
