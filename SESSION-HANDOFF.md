@@ -34,6 +34,28 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 12: Logo ("Level C")
+
+**Goal for today**
+- A simple, premium logo, applied everywhere.
+
+**What got done**
+- Chose concept 3, "Level C": a bold C with a level bar through it (balanced scale). Geometry lives in one place: `src/components/LogoMark.tsx`.
+- Applied to: the logo in the landing nav, footer and app sidebar (`Logo.tsx`, white tile + CalmOwe wordmark), the browser tab icon (`src/app/icon.svg`, thicker stroke for 16px), the iPhone home-screen icon (`src/app/apple-icon.tsx`, 180x180), and the link preview image for shared links (`src/app/opengraph-image.tsx`, 1200x630 with logo and headline).
+- Removed the default Next.js favicon.
+- Tests: `logo.test.tsx` (mark geometry, accessibility, logo link, favicon matches the mark, icon sizes). 153 tests total.
+
+**What's in progress (not finished)**
+- Nothing.
+
+**Blockers / decisions needed**
+- Brand color is black and white for now; an accent color (e.g. for marketing) is still open.
+- Before trademark filing, consider a professional designer refining the final mark.
+
+**Tests**
+- [x] `npm test` passes (153)
+- [x] `npm run build` passes
+
 ### 2026-11-14 — Day 11: Structured AI context and strict prompt
 
 **Goal for today**
