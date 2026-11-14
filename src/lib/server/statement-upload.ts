@@ -1,22 +1,34 @@
 // SERVER-ONLY. Saves an uploaded bank statement (Monthly Financial Audit) to the user's account.
-// Amounts are stored as exact rupees (paise) and the user's data currency becomes INR.
-// The store is injectable so this can be tested without a real database.
+// Any bank, any country: PDF, Excel or CSV. The built-in reader goes first; if it can't
+// understand the layout, AI extraction is the fallback. Amounts are stored exactly in the
+// statement's own currency, which becomes the user's data currency.
+// Dependencies are injectable so this can be tested without a database or AI provider.
 
 import type { StatementInfo } from "@/data/mockTransactions";
-import type { CurrencyCode } from "@/lib/currency";
+import { CURRENCY_INFO, type CurrencyCode, isCurrencyCode } from "@/lib/currency";
 import type { StatementImportResult } from "@/lib/statement-types";
-import { parseStatementCsv, type StatementRow } from "@/lib/server/statement-csv";
+import { getProviders, type Provider } from "@/lib/server/copilot";
+import { aiExtractStatement } from "@/lib/server/statement-ai";
+import { extractStatement } from "@/lib/server/statement-extract";
+import {
+  columnsFromHeader,
+  detectBankInfo,
+  detectCurrency,
+  detectUnsupportedCurrency,
+  finalizeStatement,
+  type ParsedStatement,
+  readStatementTable,
+  StatementError,
+  type StatementRow,
+} from "@/lib/server/statement-parser";
 import { assertUserId } from "@/lib/server/transactions";
 
-export const STATEMENT_CURRENCY: CurrencyCode = "INR";
-export const STATEMENT_BANK = "Canara Bank";
-
 export type StatementStore = {
-  /** Currency of the user's existing data, and how many rows aren't sample or uploaded data. */
-  getProfile(userId: string): Promise<{ currency: CurrencyCode; otherRows: number }>;
+  /** The user's data currency and how many uploaded / other real (non-sample) rows they have. */
+  getProfile(userId: string): Promise<{ currency: CurrencyCode; otherRows: number; uploadedRows: number }>;
   /** Removes sample data, then inserts new rows and updates rows already uploaded (by externalId). */
   saveRows(userId: string, rows: StatementRow[]): Promise<{ inserted: number }>;
-  /** Signed sum of all uploaded rows (paise). */
+  /** Signed sum of all uploaded rows (minor units). */
   sumUploaded(userId: string): Promise<number>;
   saveProfile(
     userId: string,
@@ -25,13 +37,25 @@ export type StatementStore = {
 };
 
 export class StatementConflictError extends Error {
-  constructor() {
-    super("This account already has transactions in another currency.");
+  constructor(
+    readonly existing: CurrencyCode,
+    readonly incoming: CurrencyCode,
+  ) {
+    super(
+      `Your account already has statements in ${existing} (${CURRENCY_INFO[existing].symbol}), and this one is in ${incoming} (${CURRENCY_INFO[incoming].symbol}). One account can hold one currency for now.`,
+    );
     this.name = "StatementConflictError";
   }
 }
 
 export type { StatementImportResult };
+
+export type ImportDeps = {
+  store?: StatementStore;
+  providers?: Provider[];
+  fetchImpl?: typeof fetch;
+  now?: Date;
+};
 
 async function defaultStore(): Promise<StatementStore> {
   const { mongoStatementStore } = await import("@/lib/server/statement-store");
@@ -40,24 +64,81 @@ async function defaultStore(): Promise<StatementStore> {
 
 /** Cleans a file name for display ("../../x.csv" -> "x.csv"). */
 export function safeFileName(name: unknown): string {
-  const base = typeof name === "string" ? name.split(/[\\/]/).pop() ?? "" : "";
-  return base.replace(/[^\w .()-]/g, "").trim().slice(0, 120) || "statement.csv";
+  const base = typeof name === "string" ? (name.split(/[\\/]/).pop() ?? "") : "";
+  return base.replace(/[^\w .()-]/g, "").trim().slice(0, 120) || "statement";
 }
 
-/** Parses and saves a statement for one user. Throws StatementError / StatementConflictError. */
+const isHeader = (cells: string[]) => columnsFromHeader(cells) !== null;
+
+/** Reads the file into transactions: built-in reader first, AI fallback second. */
+export async function readStatement(
+  file: { bytes: Uint8Array; password?: string; currency?: CurrencyCode | null },
+  deps: ImportDeps = {},
+): Promise<{ parsed: ParsedStatement; currency: CurrencyCode; bank: string; method: "reader" | "ai" }> {
+  const extracted = await extractStatement(file.bytes, { password: file.password, isHeader });
+  let currency: CurrencyCode | null = file.currency ?? detectCurrency(extracted.text);
+  const bankInfo = detectBankInfo(extracted.text);
+  let bank = bankInfo?.name ?? null;
+
+  const unsupported = !currency ? detectUnsupportedCurrency(extracted.text) : null;
+  if (unsupported) {
+    throw new StatementError(
+      `This statement looks like it's in ${unsupported}. CalmOwe supports statements in rupees, dollars, euros and pounds for now.`,
+      "unsupported_currency",
+    );
+  }
+  // Nothing in the text said which currency: use the bank's home currency, if it has one.
+  currency = currency ?? bankInfo?.currency ?? null;
+
+  let parsed: ParsedStatement | null = null;
+  let method: "reader" | "ai" = "reader";
+  for (const table of extracted.tables) {
+    const read = readStatementTable(table, currency);
+    if (read) {
+      parsed = finalizeStatement(read.transactions, read.skipped);
+      break;
+    }
+  }
+
+  if (!parsed) {
+    const ai = await aiExtractStatement(extracted.text, deps.providers ?? getProviders(), { fetchImpl: deps.fetchImpl, today: deps.now });
+    parsed = finalizeStatement(ai.transactions, ai.rejected);
+    method = "ai";
+    bank = bank ?? ai.bank;
+    if (!currency && ai.currency) {
+      if (!isCurrencyCode(ai.currency)) {
+        throw new StatementError(
+          `This statement looks like it's in ${ai.currency}. CalmOwe supports statements in rupees, dollars, euros and pounds for now.`,
+          "unsupported_currency",
+        );
+      }
+      currency = ai.currency;
+    }
+  }
+
+  if (!currency) {
+    throw new StatementError("We couldn't tell which currency this statement is in. Please choose it and upload again.", "currency_required");
+  }
+  return { parsed, currency, bank: bank ?? "Bank statement", method };
+}
+
+/** Reads and saves a statement for one user. Throws StatementError / StatementConflictError. */
 export async function importStatement(
   userId: string,
-  file: { name: string; text: string },
-  store?: StatementStore,
-  now: Date = new Date(),
+  file: { name: string; bytes: Uint8Array; password?: string; currency?: CurrencyCode | null },
+  deps: ImportDeps = {},
 ): Promise<StatementImportResult> {
   assertUserId(userId);
-  const parsed = parseStatementCsv(file.text); // validates before touching the database
-  const db = store ?? (await defaultStore());
+  const now = deps.now ?? new Date();
+  // Read and validate everything before touching the database.
+  const { parsed, currency, bank, method } = await readStatement(file, { ...deps, now });
+  const db = deps.store ?? (await defaultStore());
 
   const profile = await db.getProfile(userId);
-  // Never mix rupees with other real data in another currency (that would corrupt totals).
-  if (profile.otherRows > 0 && profile.currency !== STATEMENT_CURRENCY) throw new StatementConflictError();
+  // Never mix currencies in one account (that would corrupt every total).
+  if ((profile.otherRows > 0 || profile.uploadedRows > 0) && profile.currency !== currency) {
+    throw new StatementConflictError(profile.currency, currency);
+  }
 
   const { inserted } = await db.saveRows(userId, parsed.rows);
 
@@ -67,15 +148,15 @@ export async function importStatement(
   if (parsed.closingBalanceMinor !== null) {
     const candidate = parsed.closingBalanceMinor - (await db.sumUploaded(userId));
     if (Number.isSafeInteger(candidate)) openingBalanceMinor = candidate;
-  } else if (profile.currency !== STATEMENT_CURRENCY) {
-    openingBalanceMinor = 0; // the old balance was in another currency (e.g. sample dollars)
+  } else if (profile.uploadedRows === 0) {
+    openingBalanceMinor = 0; // replace the sample data's opening balance
   }
 
   await db.saveProfile(userId, {
-    currency: STATEMENT_CURRENCY,
+    currency,
     openingBalanceMinor,
     statement: {
-      bank: STATEMENT_BANK,
+      bank,
       fileName: safeFileName(file.name),
       uploadedAt: now.toISOString(),
       periodStart: parsed.periodStart,
@@ -93,6 +174,8 @@ export async function importStatement(
     periodEnd: parsed.periodEnd,
     moneyInMinor,
     moneyOutMinor,
-    currency: STATEMENT_CURRENCY,
+    currency,
+    bank,
+    method,
   };
 }

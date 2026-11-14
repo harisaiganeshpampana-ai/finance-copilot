@@ -19,11 +19,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCurrency } from "@/components/currency/currency-store";
-import { formatMinorUnits } from "@/lib/currency";
-import type { StatementImportResult, UploadStatementResponse } from "@/lib/statement-types";
+import { CURRENCY_CODES, CURRENCY_INFO, type CurrencyCode, formatMinorUnits } from "@/lib/currency";
+import {
+  STATEMENT_EXTENSIONS,
+  type StatementImportResult,
+  type UploadErrorCode,
+  type UploadStatementResponse,
+} from "@/lib/statement-types";
 
 /** Same limit as the server (the server re-checks everything; this is only for quick feedback). */
-export const CLIENT_MAX_BYTES = 2 * 1024 * 1024;
+export const CLIENT_MAX_BYTES = 4 * 1024 * 1024;
 
 const longDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 export const formatPeriod = (start: string, end: string) =>
@@ -31,14 +36,16 @@ export const formatPeriod = (start: string, end: string) =>
 
 /** Quick checks before uploading. Returns an error message, or null if the file looks fine. */
 export function checkStatementFile(file: { name: string; size: number }): string | null {
-  if (!/\.csv$/i.test(file.name)) return "Please choose a .csv file. In Canara net banking, download your statement as CSV.";
+  if (!STATEMENT_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext))) {
+    return "Please choose a PDF, Excel (.xlsx, .xls) or CSV statement from your bank.";
+  }
   if (file.size === 0) return "That file is empty.";
-  if (file.size > CLIENT_MAX_BYTES) return "That file is too large. The limit is 2 MB.";
+  if (file.size > CLIENT_MAX_BYTES) return "That file is too large. The limit is 4 MB.";
   return null;
 }
 
 type Stage =
-  | { name: "pick"; error?: string }
+  | { name: "pick"; error?: string; code?: UploadErrorCode }
   | { name: "uploading"; fileName: string }
   | { name: "done"; result: StatementImportResult };
 
@@ -47,10 +54,16 @@ function UploadStatementModal({ onClose }: { onClose: () => void }) {
   const { setCurrency } = useCurrency();
   const [stage, setStage] = useState<Stage>({ name: "pick" });
   const [dragging, setDragging] = useState(false);
+  const [statementCurrency, setStatementCurrency] = useState<CurrencyCode | "auto">("auto");
+  const [password, setPassword] = useState("");
+  // The file waiting for a password or a currency choice (kept only in this browser tab).
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
   const busy = stage.name === "uploading";
   const busyRef = useRef(false); // read by the Escape handler
+  const code = stage.name === "pick" ? stage.code : undefined;
+  const needsPassword = code === "password_required" || code === "password_incorrect";
 
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -71,40 +84,56 @@ function UploadStatementModal({ onClose }: { onClose: () => void }) {
     };
   }, [onClose]);
 
-  const upload = useCallback(async (file: File) => {
-    const problem = checkStatementFile(file);
-    if (problem) {
-      setStage({ name: "pick", error: problem });
-      return;
-    }
-    setStage({ name: "uploading", fileName: file.name });
-    busyRef.current = true;
-    try {
-      const body = new FormData();
-      body.append("file", file);
-      const res = await fetch("/api/statements/upload", { method: "POST", body });
-      const data = (await res.json().catch(() => null)) as UploadStatementResponse | null;
-      if (!data || !data.ok) {
-        setStage({ name: "pick", error: data && !data.ok ? data.error : "Couldn't upload your statement. Please try again." });
+  const upload = useCallback(
+    async (file: File, extra: { password?: string } = {}) => {
+      const problem = checkStatementFile(file);
+      if (problem) {
+        setStage({ name: "pick", error: problem });
         return;
       }
-      setStage({ name: "done", result: data.result });
-    } catch {
-      setStage({ name: "pick", error: "Couldn't reach CalmOwe. Check your connection and try again." });
-    } finally {
-      busyRef.current = false;
-    }
-  }, []);
+      setStage({ name: "uploading", fileName: file.name });
+      busyRef.current = true;
+      try {
+        const body = new FormData();
+        body.append("file", file);
+        body.append("currency", statementCurrency);
+        if (extra.password) body.append("password", extra.password);
+        const res = await fetch("/api/statements/upload", { method: "POST", body });
+        const data = (await res.json().catch(() => null)) as UploadStatementResponse | null;
+        if (!data || !data.ok) {
+          const failure = data && !data.ok ? data : null;
+          const retryable = failure?.code && failure.code !== "unsupported_currency" && failure.code !== "currency_conflict";
+          setPendingFile(retryable ? file : null);
+          setStage({ name: "pick", error: failure?.error ?? "Couldn't upload your statement. Please try again.", code: failure?.code });
+          return;
+        }
+        setPendingFile(null);
+        setPassword("");
+        setStage({ name: "done", result: data.result });
+      } catch {
+        setStage({ name: "pick", error: "Couldn't reach CalmOwe. Check your connection and try again." });
+      } finally {
+        busyRef.current = false;
+      }
+    },
+    [statementCurrency],
+  );
+
+  const choose = (file: File) => {
+    setPassword("");
+    setPendingFile(null);
+    void upload(file);
+  };
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
     setDragging(false);
     const file = e.dataTransfer.files?.[0];
-    if (file && !busy) void upload(file);
+    if (file && !busy) choose(file);
   };
 
   const finish = (result: StatementImportResult) => {
-    setCurrency(result.currency); // show the statement in rupees
+    setCurrency(result.currency); // show the statement in its own currency
     router.refresh();
     onClose();
     toast.success("Your audit is ready", { description: "Dashboard and AI Copilot now use your statement." });
@@ -153,8 +182,8 @@ function UploadStatementModal({ onClose }: { onClose: () => void }) {
           ) : (
             <>
               <p className="mt-4 text-sm leading-relaxed text-zinc-400">
-                Upload your Canara Bank statement as a CSV file. CalmOwe reads every transaction, sorts it into categories and
-                prepares your audit in seconds.
+                Upload a statement from any bank, as a PDF, Excel or CSV file. CalmOwe reads every transaction, sorts it into
+                categories and prepares your audit in seconds.
               </p>
 
               <div
@@ -188,8 +217,8 @@ function UploadStatementModal({ onClose }: { onClose: () => void }) {
                       <Upload className="size-5" aria-hidden="true" />
                     </span>
                     <div>
-                      <p className="text-sm font-medium text-white">Drag and drop your CSV here</p>
-                      <p className="mt-0.5 text-xs text-zinc-500">Canara Bank CSV &middot; up to 2 MB</p>
+                      <p className="text-sm font-medium text-white">Drag and drop your statement here</p>
+                      <p className="mt-0.5 text-xs text-zinc-500">Any bank &middot; PDF, Excel or CSV &middot; up to 4 MB</p>
                     </div>
                     <button
                       ref={primaryRef}
@@ -204,16 +233,38 @@ function UploadStatementModal({ onClose }: { onClose: () => void }) {
                 <input
                   ref={inputRef}
                   type="file"
-                  accept=".csv,text/csv"
+                  accept={[...STATEMENT_EXTENSIONS, "application/pdf", "text/csv"].join(",")}
                   className="sr-only"
-                  aria-label="Bank statement CSV file"
+                  aria-label="Bank statement file"
                   data-testid="statement-input"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     e.target.value = ""; // allow choosing the same file again
-                    if (file) void upload(file);
+                    if (file) choose(file);
                   }}
                 />
+              </div>
+
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <label htmlFor="statement-currency" className="text-xs text-zinc-400">
+                  Statement currency
+                </label>
+                <select
+                  id="statement-currency"
+                  value={statementCurrency}
+                  disabled={busy}
+                  onChange={(e) => setStatementCurrency(e.target.value as CurrencyCode | "auto")}
+                  className={`rounded-md border bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-indigo-400 ${
+                    code === "currency_required" ? "border-amber-400/70" : "border-zinc-700"
+                  }`}
+                >
+                  <option value="auto">Detect automatically</option>
+                  {CURRENCY_CODES.map((c) => (
+                    <option key={c} value={c}>
+                      {CURRENCY_INFO[c].symbol} {CURRENCY_INFO[c].name} ({c})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {stage.name === "pick" && stage.error && (
@@ -222,14 +273,50 @@ function UploadStatementModal({ onClose }: { onClose: () => void }) {
                 </p>
               )}
 
+              {stage.name === "pick" && pendingFile && (
+                <form
+                  className="mt-3 flex flex-col gap-2 sm:flex-row"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void upload(pendingFile, { password });
+                  }}
+                >
+                  {needsPassword && (
+                    <input
+                      type="password"
+                      autoFocus
+                      autoComplete="off"
+                      value={password}
+                      maxLength={128}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="PDF password"
+                      aria-label="PDF password"
+                      className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-indigo-400"
+                    />
+                  )}
+                  <button
+                    type="submit"
+                    disabled={(needsPassword && !password) || (code === "currency_required" && statementCurrency === "auto")}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-950 transition-colors hover:bg-zinc-200 disabled:opacity-50"
+                  >
+                    {needsPassword ? "Unlock and upload" : "Upload again"}
+                  </button>
+                </form>
+              )}
+
               <ul className="mt-5 grid gap-2.5 text-xs text-zinc-400 sm:grid-cols-2">
                 <li className="flex items-start gap-2">
                   <Lock className="mt-0.5 size-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
-                  Stored only in your account, never shared or sold.
+                  Stored only in your account, never shared or sold. PDF passwords are used once and never saved.
                 </li>
                 <li className="flex items-start gap-2">
                   <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
                   No bank login needed. Uploading again never creates duplicates.
+                </li>
+                <li className="flex items-start gap-2 sm:col-span-2">
+                  <Sparkles className="mt-0.5 size-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
+                  If our reader can&apos;t follow your bank&apos;s layout, the statement text is read by our AI provider to find
+                  the transactions.
                 </li>
               </ul>
             </>
@@ -257,6 +344,10 @@ function AuditReady({ result, onFinish }: { result: StatementImportResult; onFin
         </p>
       </div>
       <p className="mt-1 text-xs text-zinc-500">
+        {result.bank} &middot; {CURRENCY_INFO[result.currency].name}
+        {result.method === "ai" ? " · read by AI" : ""}
+      </p>
+      <p className="mt-0.5 text-xs text-zinc-500">
         {total} transaction{total === 1 ? "" : "s"} found
         {result.alreadyUploaded > 0 && result.imported > 0 ? `, ${result.alreadyUploaded} already in your account` : ""}
         {result.skipped > 0 ? ` · ${result.skipped} non-transaction line${result.skipped === 1 ? "" : "s"} ignored` : ""}

@@ -11,11 +11,12 @@ export const mongoStatementStore: StatementStore = {
   async getProfile(userId) {
     await connectToDatabase();
     const owner = new Types.ObjectId(userId);
-    const [user, otherRows] = await Promise.all([
+    const [user, otherRows, uploadedRows] = await Promise.all([
       User.findById(owner).select("dataCurrency").lean(),
       TransactionModel.countDocuments({ userId: owner, source: { $nin: ["sample", "upload"] } }),
+      TransactionModel.countDocuments({ userId: owner, source: "upload" }),
     ]);
-    return { currency: isCurrencyCode(user?.dataCurrency) ? user.dataCurrency : "USD", otherRows };
+    return { currency: isCurrencyCode(user?.dataCurrency) ? user.dataCurrency : "USD", otherRows, uploadedRows };
   },
 
   async saveRows(userId, rows) {

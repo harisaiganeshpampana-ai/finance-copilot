@@ -183,21 +183,24 @@ describe("Upload Bank Statement modal", () => {
       new Response(
         JSON.stringify({
           ok: true,
-          result: { imported: 9, alreadyUploaded: 0, skipped: 4, periodStart: "2026-10-01", periodEnd: "2026-10-28", moneyInMinor: 8_500_000, moneyOutMinor: 3_528_950, currency: "INR" },
+          result: { imported: 9, alreadyUploaded: 0, skipped: 4, periodStart: "2026-10-01", periodEnd: "2026-10-28", moneyInMinor: 8_500_000, moneyOutMinor: 3_528_950, currency: "INR", bank: "Canara Bank", method: "ai" },
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     );
     const dialog = openModal();
-    expect(dialog.getByText(/Canara Bank statement as a CSV file/)).toBeTruthy();
+    expect(dialog.getByText(/any bank, as a PDF, Excel or CSV file/)).toBeTruthy();
     await choose(new File(["Txn Date,Description,Debit,Credit"], "canara.csv", { type: "text/csv" }));
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/statements/upload");
     expect(init.method).toBe("POST");
     expect((init.body as FormData).get("file")).toBeInstanceOf(File);
+    expect((init.body as FormData).get("currency")).toBe("auto");
+    expect((init.body as FormData).get("password")).toBeNull();
 
     expect(await dialog.findByText("9 new transactions imported")).toBeTruthy();
+    expect(dialog.getByText(/Canara Bank · Indian Rupee · read by AI/)).toBeTruthy();
     expect(dialog.getByTestId("audit-money-in").textContent).toBe("₹85,000");
     expect(dialog.getByTestId("audit-money-out").textContent).toBe("₹35,290");
 
@@ -216,11 +219,48 @@ describe("Upload Bank Statement modal", () => {
 
   it("catches wrong file types before uploading (the server checks again)", async () => {
     const dialog = openModal();
-    await choose(new File(["x"], "statement.pdf", { type: "application/pdf" }));
-    expect(dialog.getByRole("alert").textContent).toMatch(/\.csv file/);
+    await choose(new File(["x"], "statement.docx", { type: "application/msword" }));
+    expect(dialog.getByRole("alert").textContent).toMatch(/PDF, Excel/);
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(checkStatementFile({ name: "a.csv", size: 3 * 1024 * 1024 })).toMatch(/too large/);
-    expect(checkStatementFile({ name: "a.CSV", size: 10 })).toBeNull();
+    expect(checkStatementFile({ name: "a.pdf", size: 5 * 1024 * 1024 })).toMatch(/too large/);
+    for (const name of ["a.CSV", "a.pdf", "a.xlsx", "a.xls"]) expect(checkStatementFile({ name, size: 10 })).toBeNull();
+  });
+
+  it("asks for the PDF password and retries with it", async () => {
+    const ok = { imported: 3, alreadyUploaded: 0, skipped: 0, periodStart: "2026-10-01", periodEnd: "2026-10-15", moneyInMinor: 1, moneyOutMinor: 1, currency: "INR", bank: "HDFC Bank", method: "reader" };
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: false, error: "This PDF is password-protected. Enter its password to continue.", code: "password_required" }), { status: 422 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, result: ok }), { status: 200 }));
+    const dialog = openModal();
+    await choose(new File(["%PDF"], "hdfc.pdf", { type: "application/pdf" }));
+    expect((await dialog.findByRole("alert")).textContent).toMatch(/password-protected/);
+    const unlock = dialog.getByRole("button", { name: "Unlock and upload" }) as HTMLButtonElement;
+    expect(unlock.disabled).toBe(true);
+    fireEvent.change(dialog.getByLabelText("PDF password"), { target: { value: "ABCD1990" } });
+    await act(async () => {
+      fireEvent.click(unlock);
+    });
+    const body = (fetchMock.mock.calls[1] as [string, RequestInit])[1].body as FormData;
+    expect(body.get("password")).toBe("ABCD1990");
+    expect((body.get("file") as File).name).toBe("hdfc.pdf");
+    expect(await dialog.findByText("3 new transactions imported")).toBeTruthy();
+  });
+
+  it("lets the user choose the currency when it can't be detected", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: false, error: "We couldn't tell which currency this statement is in.", code: "currency_required" }), { status: 422 }),
+    );
+    const dialog = openModal();
+    await choose(new File(["x"], "s.csv", { type: "text/csv" }));
+    await dialog.findByRole("alert");
+    const again = dialog.getByRole("button", { name: "Upload again" }) as HTMLButtonElement;
+    expect(again.disabled).toBe(true); // pick a currency first
+    fireEvent.change(dialog.getByLabelText("Statement currency"), { target: { value: "EUR" } });
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: false, error: "x" }), { status: 422 }));
+    await act(async () => {
+      fireEvent.click(again);
+    });
+    expect(((fetchMock.mock.calls[1] as [string, RequestInit])[1].body as FormData).get("currency")).toBe("EUR");
   });
 
   it("closes with Escape", () => {

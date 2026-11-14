@@ -15,15 +15,15 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 - Dashboard: stats, 7-day chart, transactions, multi-currency (USD/INR/EUR/GBP, fixed demo rates), waitlist for real sync.
 - AI Copilot `/copilot`: `/api/chat`, Gemini → OpenAI → DeepSeek fallback, user's own data from MongoDB, server-side math for currency/affordability, no investment advice.
 - Plaid (Sandbox): `/api/plaid/create_link_token`, `/api/plaid/exchange_public_token`; access token stored AES-256-GCM encrypted on the user; connection per account.
-- **Monthly Financial Audit (CSV upload, current focus)**: "Upload Bank Statement" on the dashboard → `POST /api/statements/upload` (login, .csv only, 2 MB max) → `src/lib/server/statement-csv.ts` (papaparse; Canara layout plus Amount/Dr-Cr variants) → `Transaction` rows with `source: "upload"`, deduped by `externalId`. Amounts are exact paise; `User.dataCurrency = "INR"` and `User.statement` hold the statement info. Dashboard/Copilot convert from the data currency (`DataCurrencyProvider`, `convertMinor`). Copilot gets `dataSource` + server-computed `audit` figures.
+- **Monthly Financial Audit (statement upload, current focus)**: "Upload Bank Statement" on the dashboard → `POST /api/statements/upload` (login, PDF / .xlsx / .xls / CSV / TXT, 4 MB, 10 uploads/min, `maxDuration` 60s, optional PDF password + currency fields). Pipeline in `src/lib/server/`: `statement-extract.ts` (file type from bytes; PDF via `unpdf` laid out by header column positions; Excel via SheetJS 0.20.3 from cdn.sheetjs.com; text via papaparse) → `statement-parser.ts` (generic table reader: header detection incl. German/French/Spanish, day- vs month-first dates, decimal commas, currency + bank detection) → if that fails, `statement-ai.ts` (Gemini → OpenAI → DeepSeek, JSON output, every amount must appear in the statement text) → `statement-upload.ts` (one currency per account; `StatementConflictError` otherwise). Rows: `Transaction` `source: "upload"`, deduped by `externalId`. Supported currencies: INR, USD, EUR, GBP. Dashboard/Copilot convert from the data currency (`DataCurrencyProvider`, `convertMinor`); Copilot gets `dataSource` + server-computed `audit`. `unpdf`/`xlsx` are in `serverExternalPackages`.
 - Plaid transaction import (`/transactions/sync`) is built and tested but **parked on branch `plaid-transaction-import`** (not pushed) while live APIs wait for incorporation. Merging it will conflict in `Transaction.ts`, `mockTransactions.ts`, `DashboardView.tsx` ("other" category added on both sides).
-- 361 automated tests (`npm test`), build passes.
+- 394 automated tests (`npm test`), build passes.
 
 **Env vars (Vercel; local .env.local is incomplete)**: MONGODB_URI, NEXTAUTH_SECRET, NEXTAUTH_URL=https://www.calmowe.com, GOOGLE_CLIENT_ID/SECRET, GEMINI_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY, PLAID_CLIENT_ID/SECRET, PLAID_ENV=sandbox. Recommended: add ENCRYPTION_KEY.
 
 **Next steps (pick one)**
-1. Test CSV upload with a REAL Canara Bank CSV export (the parser was built from the usual Canara layout, not a real file). Fix the column matching if anything is off.
-2. "Remove uploaded data" button (currently only re-upload/add); support more banks (SBI, HDFC, ICICI layouts).
+1. Test uploads with REAL statements (Canara CSV, an HDFC/SBI PDF, a password-protected PDF, an Excel export). All tests use realistic made-up files. Check Vercel logs for "[statements]" errors.
+2. "Remove uploaded data" button (currently only re-upload/add); more currencies (AED, SGD, CAD, AUD...); scanned (image) PDFs via AI vision.
 3. When incorporated: merge branch `plaid-transaction-import` (Plaid `/transactions/sync` import).
 4. India bank data via an Account Aggregator (Finvu docs: https://docs.finvu.in; or Setu). First check the FIU regulatory route with Finvu.
 5. Settings page: load/save the real user's name and email (still placeholder).
@@ -63,6 +63,23 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 ---
 
 ## Log
+
+### 2026-11-14 — Day 20b: Any bank, any country, PDF / Excel / CSV
+
+**Founder decisions**: AI reading as a fallback only (disclosed on the upload screen and Privacy page); support any country (₹ $ € £).
+
+**What got done**
+- PDF statements (incl. multi-page, wrapped descriptions, blank Debit/Credit cells, password-protected PDFs with a password prompt; password used once, never stored or logged).
+- Excel (.xlsx, old .xls, HTML-disguised .xls) and CSV/TSV/TXT (any delimiter, UTF-8/UTF-16/Windows-1252).
+- Generic reader: US month-first dates, European decimal commas, foreign-language headers, bank and currency detection (bank's home currency as a hint), user can pick the currency if it's unclear.
+- AI fallback with anti-hallucination check (each amount must be printed in the statement), chunking, provider fallback.
+- One currency per account (clear message if a statement in another currency is uploaded).
+
+**Not verified**: no real bank files available; live check is for the founder.
+
+**Tests**
+- [x] `npm test` passes (394)
+- [x] `npm run build` passes
 
 ### 2026-11-14 — Day 20: Monthly Financial Audit (Canara Bank CSV upload)
 

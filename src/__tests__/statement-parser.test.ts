@@ -7,7 +7,7 @@ import {
   parseStatementCsv,
   parseStatementDate,
   StatementError,
-} from "@/lib/server/statement-csv";
+} from "@/lib/server/statement-parser";
 import { CANARA_CSV } from "./fixtures/canara-statement";
 
 describe("Canara Bank statement CSV", () => {
@@ -108,7 +108,7 @@ describe("rejecting bad files (server-side validation)", () => {
   });
 
   it("rejects a table with no usable rows", () => {
-    expect(() => parseStatementCsv("Date,Description,Debit,Credit\nnot a date,Hello,1,\n")).toThrow(/no transactions/);
+    expect(() => parseStatementCsv("Date,Description,Debit,Credit\nnot a date,Hello,1,\n")).toThrow(StatementError);
   });
 
   it("caps the number of rows", () => {

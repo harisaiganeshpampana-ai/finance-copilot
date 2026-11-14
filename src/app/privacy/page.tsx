@@ -34,6 +34,11 @@ const sections: LegalSection[] = [
           names, balances and transactions. We never ask for or store your bank login password.
         </li>
         <li>
+          <strong>Uploaded bank statements:</strong> the transactions, dates, balances, bank name and file name from
+          statements you upload (PDF, Excel or CSV). We keep the extracted transactions, not the original file. If a PDF
+          is password-protected, the password is used once to open it and is never stored.
+        </li>
+        <li>
           <strong>Copilot content:</strong> the questions you ask the AI Copilot and the answers it generates.
         </li>
         <li>
@@ -71,6 +76,11 @@ const sections: LegalSection[] = [
           relevant financial context (for example balances, totals and transactions) to a third-party AI model provider
           to generate a response. Depending on availability, this may include providers such as Google (Gemini), OpenAI
           and DeepSeek.
+        </p>
+        <p>
+          When you upload a bank statement, CalmOwe first reads it with its own built-in reader. Only if that reader
+          can&apos;t understand your bank&apos;s layout, the statement&apos;s text is sent to one of these AI providers to
+          find the transactions. We check every transaction the AI returns against the statement itself.
         </p>
         <ul>
           <li>We send only the information needed to answer your question.</li>

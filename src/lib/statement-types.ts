@@ -6,12 +6,21 @@ import type { CurrencyCode } from "@/lib/currency";
 export type StatementImportResult = {
   imported: number; // new rows
   alreadyUploaded: number; // rows that were in an earlier upload
-  skipped: number; // lines in the table that weren't transactions
+  skipped: number; // lines that weren't transactions
   periodStart: string; // YYYY-MM-DD
   periodEnd: string; // YYYY-MM-DD
-  moneyInMinor: number; // paise
-  moneyOutMinor: number; // paise (positive)
+  moneyInMinor: number; // minor units (cents/paise)
+  moneyOutMinor: number; // minor units (positive)
   currency: CurrencyCode;
+  bank: string;
+  /** "reader" = CalmOwe's built-in reader; "ai" = read by the AI fallback. */
+  method: "reader" | "ai";
 };
 
-export type UploadStatementResponse = { ok: true; result: StatementImportResult } | { ok: false; error: string };
+/** Why an upload needs something more from the user. */
+export type UploadErrorCode = "password_required" | "password_incorrect" | "currency_required" | "unsupported_currency" | "currency_conflict";
+
+export type UploadStatementResponse = { ok: true; result: StatementImportResult } | { ok: false; error: string; code?: UploadErrorCode };
+
+/** File types the uploader accepts. */
+export const STATEMENT_EXTENSIONS = [".pdf", ".csv", ".xlsx", ".xls", ".txt", ".tsv"] as const;
