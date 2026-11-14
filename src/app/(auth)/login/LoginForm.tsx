@@ -5,14 +5,18 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Field, FormError, inputClass, PasswordInput, SubmitButton } from "@/components/auth/AuthFields";
+import { GoogleButton, OrDivider } from "@/components/auth/GoogleButton";
+import { authErrorMessage } from "@/lib/auth/errors";
 import { safeCallbackUrl } from "@/lib/auth/redirect";
 
-export function LoginForm() {
+export function LoginForm({ googleEnabled = false }: { googleEnabled?: boolean }) {
   const router = useRouter();
-  const callbackUrl = safeCallbackUrl(useSearchParams().get("callbackUrl"));
+  const params = useSearchParams();
+  const callbackUrl = safeCallbackUrl(params.get("callbackUrl"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string>();
+  // Errors from a Google sign-in redirect arrive as ?error=...
+  const [error, setError] = useState<string | undefined>(() => authErrorMessage(params.get("error")));
   const [pending, setPending] = useState(false);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -42,6 +46,12 @@ export function LoginForm() {
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4">
       <FormError message={error} />
+      {googleEnabled && (
+        <>
+          <GoogleButton callbackUrl={callbackUrl} />
+          <OrDivider />
+        </>
+      )}
       <Field id="email" label="Email">
         <input
           id="email"

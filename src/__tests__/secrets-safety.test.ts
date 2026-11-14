@@ -47,6 +47,11 @@ describe("secret safety", () => {
     expect(config).toMatch(/logging:\s*\{\s*serverFunctions:\s*false\s*\}/);
   });
 
+  it("Google OAuth credentials are only read by the auth config", () => {
+    const readers = files.filter((f) => /process\.env\.GOOGLE_CLIENT_(ID|SECRET)|env\.GOOGLE_CLIENT_(ID|SECRET)/.test(f.text));
+    expect(readers.map((f) => f.path)).toEqual(["lib/auth/options.ts"]);
+  });
+
   it("NEXTAUTH_SECRET is only read by the auth config and the proxy", () => {
     const readers = files.filter((f) => f.text.includes("process.env.NEXTAUTH_SECRET")).map((f) => f.path).sort();
     expect(readers).toEqual(["lib/auth/options.ts", "proxy.ts"]);

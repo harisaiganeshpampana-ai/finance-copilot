@@ -34,6 +34,25 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 16: Continue with Google
+
+**What got done**
+- Production login fixed (config only): `NEXTAUTH_SECRET` added on Vercel, Atlas Network Access opened (0.0.0.0/0), `MONGODB_URI` corrected (user `lragriprep_db_user`, cluster `cluster0.mm7qghn.mongodb.net`, db `calmowe`).
+- `GoogleProvider` added to NextAuth (`src/lib/auth/options.ts`), enabled only when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set on the server.
+- Google users are saved to MongoDB (`handleGoogleSignIn` → `upsertOAuthUser`). Only verified Google emails are accepted; an existing email/password account with the same email is linked and keeps its password. User model: password now optional, new `provider` and `image` fields.
+- Google-only accounts can't log in with the password form; signing up with such an email says "Use Continue with Google".
+- "Continue with Google" button (official Google logo, dark style) above an "or" divider on /login and /signup; hidden if Google isn't configured. Google sign-in errors return to /login with a friendly message.
+- Tests: `google-auth.test.ts`, more in `auth-pages.test.tsx` and `secrets-safety.test.ts`. 238 tests total.
+
+**Blockers / decisions needed**
+- Google Cloud Console → Credentials → your OAuth client → Authorized redirect URIs must include `https://www.calmowe.com/api/auth/callback/google` (and `http://localhost:3000/api/auth/callback/google` for local). Authorized JavaScript origins: `https://www.calmowe.com`.
+- If the Google consent screen is in "Testing" mode, only listed test users can sign in; publish it for everyone.
+- Local `.env.local` still lacks `MONGODB_URI`, `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, so login and the Google button don't work locally.
+
+**Tests**
+- [x] `npm test` passes (238)
+- [x] `npm run build` passes
+
 ### 2026-11-14 — Day 15: User accounts (NextAuth + MongoDB)
 
 **Goal for today**

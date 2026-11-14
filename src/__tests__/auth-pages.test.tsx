@@ -32,6 +32,53 @@ afterEach(() => {
 
 const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
+describe("Continue with Google", () => {
+  const withGoogle = () => {
+    vi.stubEnv("GOOGLE_CLIENT_ID", "test-client-id");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "test-client-secret");
+  };
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each([
+    ["/login", LoginPage],
+    ["/signup", SignupPage],
+  ])("%s shows the Google button with the Google logo, above an 'or' divider", (_path, Page) => {
+    withGoogle();
+    const { container } = render(<Page />);
+    const button = screen.getByRole("button", { name: "Continue with Google" });
+    expect(button.querySelector("[data-google-logo]")).not.toBeNull();
+    const divider = screen.getByRole("separator", { name: "or" });
+    // Google button comes first, then the divider, then the email field.
+    const order = [button, divider, screen.getByLabelText("Email")].map((el) =>
+      [...container.querySelectorAll("*")].indexOf(el),
+    );
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it("starts Google sign-in and returns to the requested page", () => {
+    withGoogle();
+    nav.params = new URLSearchParams("callbackUrl=/copilot");
+    render(<LoginPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
+    expect(signIn).toHaveBeenCalledWith("google", { callbackUrl: "/copilot" });
+    expect(screen.getByRole("button", { name: /redirecting to google/i })).toBeTruthy();
+  });
+
+  it("is hidden when Google isn't configured on the server", () => {
+    vi.stubEnv("GOOGLE_CLIENT_ID", "");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "");
+    render(<LoginPage />);
+    expect(screen.queryByRole("button", { name: "Continue with Google" })).toBeNull();
+    expect(screen.queryByRole("separator", { name: "or" })).toBeNull();
+  });
+
+  it("shows a friendly message when Google sign-in comes back with an error", () => {
+    nav.params = new URLSearchParams("error=AccessDenied");
+    render(<LoginPage />);
+    expect(screen.getByRole("alert").textContent).toMatch(/Google sign-in was cancelled/);
+  });
+});
+
 describe("/login", () => {
   it("renders the branded login form", () => {
     render(<LoginPage />);

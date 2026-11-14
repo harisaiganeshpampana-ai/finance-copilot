@@ -5,12 +5,15 @@ import { burnPasswordCheck, hashPassword, verifyPassword } from "@/lib/auth/pass
 import { parseLoginCredentials, validateSignup, type SignupField } from "@/lib/auth/validation";
 import { DatabaseNotConfiguredError } from "@/lib/server/db";
 
-export type StoredUser = { id: string; name: string; email: string; passwordHash: string };
+// passwordHash is null for accounts created with Google (they have no password).
+export type StoredUser = { id: string; name: string; email: string; passwordHash: string | null };
 export type PublicUser = { id: string; name: string; email: string };
 
 export type UserStore = {
   findByEmail(email: string): Promise<StoredUser | null>;
   create(user: { name: string; email: string; passwordHash: string }): Promise<PublicUser>;
+  /** Find the account for a verified Google email, or create one. Never touches an existing password. */
+  upsertOAuthUser(user: { name: string; email: string; image?: string | null; provider: "google" }): Promise<PublicUser>;
 };
 
 async function defaultStore(): Promise<UserStore> {
@@ -44,7 +47,8 @@ export async function authorizeCredentials(raw: unknown, store?: UserStore): Pro
 
   const users = store ?? (await defaultStore());
   const user = await users.findByEmail(creds.email);
-  if (!user) {
+  // No account, or a Google-only account without a password: reject (same timing either way).
+  if (!user || !user.passwordHash) {
     await burnPasswordCheck(creds.password);
     return null;
   }
@@ -65,8 +69,16 @@ export async function registerUser(input: unknown, store?: UserStore): Promise<R
 
   try {
     const users = store ?? (await defaultStore());
-    if (await users.findByEmail(email)) {
-      return { ok: false, errors: { email: "An account with this email already exists. Log in instead." } };
+    const existing = await users.findByEmail(email);
+    if (existing) {
+      return {
+        ok: false,
+        errors: {
+          email: existing.passwordHash
+            ? "An account with this email already exists. Log in instead."
+            : "This email is registered with Google. Use Continue with Google.",
+        },
+      };
     }
     const user = await users.create({ name, email, passwordHash: await hashPassword(password) });
     return { ok: true, user };
@@ -81,5 +93,30 @@ export async function registerUser(input: unknown, store?: UserStore): Promise<R
     }
     console.error("[auth] Sign-up failed:", err instanceof Error ? err.message : err);
     return { ok: false, errors: { form: "Something went wrong creating your account. Please try again." } };
+  }
+}
+
+// ---------- Google sign-in ----------
+
+export type OAuthProfile = { email?: string | null; email_verified?: boolean | null; name?: string | null; picture?: string | null };
+
+/**
+ * Called when someone signs in with Google. Only verified Google emails are accepted
+ * (so nobody can take over an account by claiming an email they don't own). The user
+ * is found or created in MongoDB; an existing email/password account is linked by email.
+ * Returns the CalmOwe user, or null to deny sign-in.
+ */
+export async function handleGoogleSignIn(profile: OAuthProfile | undefined, store?: UserStore): Promise<PublicUser | null> {
+  const email = typeof profile?.email === "string" ? profile.email.trim().toLowerCase() : "";
+  if (!email || profile?.email_verified !== true) return null;
+  const name = (typeof profile?.name === "string" && profile.name.trim().slice(0, 100)) || email.split("@")[0];
+  const image = typeof profile?.picture === "string" ? profile.picture.slice(0, 2048) : null;
+
+  try {
+    const users = store ?? (await defaultStore());
+    return await users.upsertOAuthUser({ name, email, image, provider: "google" });
+  } catch (err) {
+    console.error("[auth] Google sign-in could not save user:", err instanceof Error ? err.message : err);
+    return null;
   }
 }

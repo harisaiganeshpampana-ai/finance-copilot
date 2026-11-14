@@ -28,6 +28,13 @@ function memoryStore(initial: StoredUser[] = []) {
       users.push(user);
       return { id: user.id, name, email };
     }),
+    upsertOAuthUser: vi.fn(async ({ name, email }) => {
+      const existing = users.find((u) => u.email === email);
+      if (existing) return { id: existing.id, name: existing.name, email: existing.email };
+      const user = { id: `u${users.length + 1}`, name, email, passwordHash: null };
+      users.push(user);
+      return { id: user.id, name, email };
+    }),
   };
   return { store, users };
 }
@@ -95,7 +102,7 @@ describe("registerUser", () => {
     const result = await registerUser({ name: "Hari", email: "Hari@Example.com", password: "calmowe123" }, store);
     expect(result).toEqual({ ok: true, user: { id: "u1", name: "Hari", email: "hari@example.com" } });
     expect(users[0].passwordHash).not.toBe("calmowe123");
-    expect(await verifyPassword("calmowe123", users[0].passwordHash)).toBe(true);
+    expect(await verifyPassword("calmowe123", users[0].passwordHash!)).toBe(true);
     expect(JSON.stringify(result)).not.toContain("calmowe123");
   });
 
@@ -121,6 +128,7 @@ describe("registerUser", () => {
         throw new DatabaseNotConfiguredError();
       },
       create: async () => ({ id: "", name: "", email: "" }),
+      upsertOAuthUser: async () => ({ id: "", name: "", email: "" }),
     };
     const r1 = await registerUser(input, notConfigured);
     expect(r1.ok === false && r1.errors.form).toMatch(/isn't available yet/);
@@ -130,6 +138,7 @@ describe("registerUser", () => {
       create: async () => {
         throw Object.assign(new Error("E11000 duplicate key"), { code: 11000 });
       },
+      upsertOAuthUser: async () => ({ id: "", name: "", email: "" }),
     };
     const r2 = await registerUser(input, race);
     expect(r2.ok === false && r2.errors.email).toMatch(/already exists/);

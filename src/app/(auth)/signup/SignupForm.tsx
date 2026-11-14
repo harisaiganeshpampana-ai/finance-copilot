@@ -6,13 +6,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Check } from "lucide-react";
 import { Field, FormError, inputClass, PasswordInput, SubmitButton } from "@/components/auth/AuthFields";
+import { GoogleButton, OrDivider } from "@/components/auth/GoogleButton";
 import { safeCallbackUrl } from "@/lib/auth/redirect";
 import type { SignupField } from "@/lib/auth/validation";
 import { signUp } from "./actions";
 
 type Errors = Partial<Record<SignupField, string>>;
 
-export function SignupForm() {
+export function SignupForm({ googleEnabled = false }: { googleEnabled?: boolean }) {
   const router = useRouter();
   const callbackUrl = safeCallbackUrl(useSearchParams().get("callbackUrl"));
   const [name, setName] = useState("");
@@ -54,6 +55,12 @@ export function SignupForm() {
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4">
       <FormError message={errors.form} />
+      {googleEnabled && (
+        <>
+          <GoogleButton callbackUrl={callbackUrl} />
+          <OrDivider />
+        </>
+      )}
       <Field id="name" label="Full name" error={errors.name}>
         <input
           id="name"

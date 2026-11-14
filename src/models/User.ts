@@ -6,8 +6,12 @@ const UserSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 100 },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true, maxlength: 254 },
-    // bcrypt hash, never the plain password. Excluded from queries unless explicitly selected.
-    password: { type: String, required: true, select: false },
+    // bcrypt hash, never the plain password. Absent for accounts created with Google.
+    // Excluded from queries unless explicitly selected.
+    password: { type: String, select: false },
+    // How the account was first created.
+    provider: { type: String, enum: ["credentials", "google"], default: "credentials" },
+    image: { type: String, maxlength: 2048 },
   },
   { timestamps: true },
 );
