@@ -119,6 +119,32 @@ describe("POST /api/chat", () => {
     expect(text).not.toContain("upstream");
   });
 
+  it.each([
+    [401, /rejected the API key/],
+    [403, /rejected the API key/],
+    [402, /out of credit/],
+    [404, /couldn't find the AI model/],
+    [429, /usage limit or quota/],
+    [503, /having problems right now/],
+  ])("explains a provider %i error in plain words (no key, no raw response)", async (status, reason) => {
+    fetchMock.mockResolvedValueOnce(new Response(`{"error":"secret detail ${FAKE_KEY}"}`, { status }));
+    const res = await chat({ message: "Hi" });
+    expect(res.status).toBe(502);
+    const { error } = await res.json();
+    expect(error).toMatch(reason);
+    expect(error).toContain("DeepSeek");
+    expect(error).not.toContain(FAKE_KEY);
+    expect(error).not.toContain("secret detail");
+  });
+
+  it("names OpenAI in the reason when OpenAI is the provider", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "");
+    vi.stubEnv("OPENAI_API_KEY", FAKE_KEY);
+    fetchMock.mockResolvedValueOnce(new Response("nope", { status: 401 }));
+    const { error } = await (await chat({ message: "Hi" })).json();
+    expect(error).toMatch(/^OpenAI rejected the API key/);
+  });
+
   it("returns 502 when the provider is unreachable or returns no answer", async () => {
     fetchMock.mockRejectedValueOnce(new Error("network down"));
     expect((await chat({ message: "Hi" })).status).toBe(502);

@@ -1,4 +1,11 @@
-import { askCopilot, getProvider, isRateLimited, validateChatRequest } from "@/lib/server/copilot";
+import {
+  askCopilot,
+  describeUpstreamFailure,
+  getProvider,
+  isRateLimited,
+  UpstreamError,
+  validateChatRequest,
+} from "@/lib/server/copilot";
 
 // POST /api/chat — the AI Copilot. Runs only on the server; the API key never leaves it.
 export async function POST(request: Request) {
@@ -27,8 +34,10 @@ export async function POST(request: Request) {
     const reply = await askCopilot(provider, parsed.data);
     return Response.json({ reply });
   } catch (err) {
-    // Log details on the server only; never send provider errors (or keys) to the browser.
+    // Log details on the server only. The browser gets a safe reason based on the
+    // provider's status code, never the raw provider response or the key.
     console.error("[api/chat] AI request failed:", err instanceof Error ? err.message : err);
-    return Response.json({ error: "The Copilot couldn't answer right now. Please try again." }, { status: 502 });
+    const status = err instanceof UpstreamError ? err.status : undefined;
+    return Response.json({ error: describeUpstreamFailure(provider.name, status) }, { status: 502 });
   }
 }

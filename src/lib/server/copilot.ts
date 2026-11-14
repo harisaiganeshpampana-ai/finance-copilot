@@ -108,7 +108,36 @@ export function buildSystemPrompt(currency: CurrencyCode): string {
 
 // ---------- Model call ----------
 
-export class UpstreamError extends Error {}
+export class UpstreamError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * A safe, human-readable reason for an AI provider failure. Contains only the
+ * provider's HTTP status category, never keys or raw provider responses.
+ */
+export function describeUpstreamFailure(provider: Provider["name"] | undefined, status: number | undefined): string {
+  const name = provider === "openai" ? "OpenAI" : provider === "deepseek" ? "DeepSeek" : "The AI provider";
+  switch (status) {
+    case 401:
+    case 403:
+      return `${name} rejected the API key (error ${status}). Check that the key is correct and saved under the right name in Vercel, then redeploy.`;
+    case 402:
+      return `${name} says the account is out of credit (error 402). Add balance to the account, then try again.`;
+    case 404:
+      return `${name} couldn't find the AI model (error 404). The key may not have access to this model.`;
+    case 429:
+      return `${name} usage limit or quota reached (error 429). Check billing/quota on the provider's site, or wait and try again.`;
+    default:
+      if (status && status >= 500) return `${name} is having problems right now (error ${status}). Please try again shortly.`;
+      return "The Copilot couldn't answer right now. Please try again.";
+  }
+}
 
 export async function askCopilot(
   provider: Provider,
@@ -131,7 +160,7 @@ export async function askCopilot(
     signal: AbortSignal.timeout(30_000),
   });
 
-  if (!response.ok) throw new UpstreamError(`AI provider returned ${response.status}`);
+  if (!response.ok) throw new UpstreamError(`AI provider returned ${response.status}`, response.status);
   const data: unknown = await response.json();
   const content =
     isRecord(data) && Array.isArray(data.choices) && isRecord(data.choices[0]) && isRecord(data.choices[0].message)

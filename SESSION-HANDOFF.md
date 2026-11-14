@@ -57,9 +57,11 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 - Local dev has no key, so the chat replies "isn't configured yet". To test locally: `vercel env pull .env.local` (or create `.env.local` with the key; it is git-ignored).
 - The rate limit is per server instance. For real traffic, use a shared limiter (e.g. Upstash/Vercel KV) and require login.
 - The AI still answers from mock data.
+- Live test on Vercel failed with DeepSeek error 402 (Insufficient Balance): the DeepSeek account needs credit at platform.deepseek.com. Key and code are fine.
+- Chat errors now explain provider failures in plain words (401/403 key rejected, 402 out of credit, 404 model, 429 quota, 5xx outage). Consider making these more generic for end users before public launch.
 
 **Tests**
-- [x] `npm test` passes (96)
+- [x] `npm test` passes (103)
 - [x] `npm run build` passes
 
 ### 2026-11-14 — Day 8: Name chosen: CalmOwe
