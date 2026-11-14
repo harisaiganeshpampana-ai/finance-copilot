@@ -5,8 +5,8 @@ import { MAX_STATEMENT_BYTES, StatementError } from "@/lib/server/statement-pars
 import { importStatement, StatementConflictError } from "@/lib/server/statement-upload";
 import { STATEMENT_EXTENSIONS, type UploadErrorCode, type UploadStatementResponse } from "@/lib/statement-types";
 
-// Reading a long PDF with the AI fallback can take a while.
-export const maxDuration = 60;
+// Reading a long PDF with the AI fallback can take a while (Vercel Hobby + Fluid compute allows up to 300 s).
+export const maxDuration = 180;
 
 const fail = (error: string, status: number, code?: UploadErrorCode) =>
   Response.json({ ok: false, error, ...(code ? { code } : {}) } satisfies UploadStatementResponse, { status });

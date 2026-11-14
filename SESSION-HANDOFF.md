@@ -17,7 +17,7 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 - Plaid (Sandbox): `/api/plaid/create_link_token`, `/api/plaid/exchange_public_token`; access token stored AES-256-GCM encrypted on the user; connection per account.
 - **Monthly Financial Audit (statement upload, current focus)**: "Upload Bank Statement" on the dashboard → `POST /api/statements/upload` (login, PDF / .xlsx / .xls / CSV / TXT, 4 MB, 10 uploads/min, `maxDuration` 60s, optional PDF password + currency fields). Pipeline in `src/lib/server/`: `statement-extract.ts` (file type from bytes; PDF via `unpdf` laid out by header column positions; Excel via SheetJS 0.20.3 from cdn.sheetjs.com; text via papaparse) → `statement-parser.ts` (generic table reader: header detection incl. German/French/Spanish, day- vs month-first dates, decimal commas, currency + bank detection) → if that fails, `statement-ai.ts` (Gemini → OpenAI → DeepSeek, JSON output, every amount must appear in the statement text) → `statement-upload.ts` (one currency per account; `StatementConflictError` otherwise). Rows: `Transaction` `source: "upload"`, deduped by `externalId`. Supported currencies: INR, USD, EUR, GBP. Dashboard/Copilot convert from the data currency (`DataCurrencyProvider`, `convertMinor`); Copilot gets `dataSource` + server-computed `audit`. `unpdf`/`xlsx` are in `serverExternalPackages`.
 - Plaid transaction import (`/transactions/sync`) is built and tested but **parked on branch `plaid-transaction-import`** (not pushed) while live APIs wait for incorporation. Merging it will conflict in `Transaction.ts`, `mockTransactions.ts`, `DashboardView.tsx` ("other" category added on both sides).
-- 394 automated tests (`npm test`), build passes.
+- 404 automated tests (`npm test`), build passes.
 
 **Env vars (Vercel; local .env.local is incomplete)**: MONGODB_URI, NEXTAUTH_SECRET, NEXTAUTH_URL=https://www.calmowe.com, GOOGLE_CLIENT_ID/SECRET, GEMINI_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY, PLAID_CLIENT_ID/SECRET, PLAID_ENV=sandbox. Recommended: add ENCRYPTION_KEY.
 
@@ -63,6 +63,20 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 ---
 
 ## Log
+
+### 2026-11-14 — Day 20c: First real upload failed; reader and AI fallback hardened
+
+**What happened**: a real statement wasn't understood by the built-in reader; the AI fallback then failed on every provider (Gemini 429 then 503 because ~5 chunks were sent at once; OpenAI timed out at 45 s; DeepSeek 402 = out of credit).
+
+**Fixes**
+- PDF headers split over two lines ("Withdrawal" / "(Dr)") are stacked into one header.
+- New line-by-line reader (`readStatementLines`): date at the start, amounts at the end, running balance decides money in/out (works oldest- or newest-first, uses "Opening Balance"); gives up rather than guess.
+- AI fallback: compact row format (fewer tokens), max 2 chunks at a time, one retry on 429/503, 150 s budget, route `maxDuration` 180 (Hobby + Fluid allows 300); "Our AI reader is busy" message when providers are overloaded.
+- When the reader fails, the log shows `[statements] Built-in reader failed ... layout hints` with header lines (digits masked) and the shape of two rows (letters -> a, digits -> 9). Use these to improve the reader.
+
+**Founder to-do**: top up DeepSeek or remove `DEEPSEEK_API_KEY` in Vercel (it returns 402).
+
+**Tests**: 404 passing; build passes.
 
 ### 2026-11-14 — Day 20b: Any bank, any country, PDF / Excel / CSV
 

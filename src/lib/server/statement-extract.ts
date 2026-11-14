@@ -78,15 +78,45 @@ export function pdfItemsToLines(items: PdfItem[]): Cell[][] {
  * Debit or Credit cell stays blank instead of shifting the other values left.
  * Lines before the header are kept as single cells (account details).
  */
+/** Stacks a two-line header ("Withdrawal" over "Amount (INR)") into one row of cells. */
+export function mergeHeaderLines(top: Cell[], bottom: Cell[]): Cell[] {
+  const cells = top.map((c) => ({ ...c }));
+  for (const b of bottom) {
+    const above = cells.find((c) => Math.min(c.x1, b.x1) - Math.max(c.x0, b.x0) > 0);
+    if (above) {
+      above.text = `${above.text} ${b.text}`;
+      above.x0 = Math.min(above.x0, b.x0);
+      above.x1 = Math.max(above.x1, b.x1);
+    } else {
+      cells.push({ ...b });
+    }
+  }
+  return cells.sort((a, b) => a.x0 - b.x0);
+}
+
+/** The table header: a single line if one matches, otherwise two stacked lines. */
+function findHeader(lines: Cell[][], isHeader: (cells: string[]) => boolean): { index: number; span: number; cells: Cell[] } | null {
+  const texts = (l: Cell[]) => l.map((c) => c.text);
+  const single = lines.findIndex((l) => isHeader(texts(l)));
+  if (single !== -1) return { index: single, span: 1, cells: lines[single] };
+  for (let i = 0; i + 1 < lines.length; i++) {
+    const merged = mergeHeaderLines(lines[i], lines[i + 1]);
+    if (isHeader(texts(merged))) return { index: i, span: 2, cells: merged };
+  }
+  return null;
+}
+
 export function pdfLinesToTable(lines: Cell[][], isHeader: (cells: string[]) => boolean): string[][] {
-  const headerIndex = lines.findIndex((l) => isHeader(l.map((c) => c.text)));
-  if (headerIndex === -1) return lines.map((l) => l.map((c) => c.text));
-  const header = lines[headerIndex];
-  const headerTexts = header.map((c) => c.text);
-  const table: string[][] = lines.slice(0, headerIndex + 1).map((l) => l.map((c) => c.text));
-  for (const line of lines.slice(headerIndex + 1)) {
+  const found = findHeader(lines, isHeader);
+  if (!found) return lines.map((l) => l.map((c) => c.text));
+  const header = found.cells;
+  const headerIndex = found.index;
+  // The header line(s) as printed, to skip them when they repeat on later pages.
+  const headerLines = new Set(lines.slice(found.index, found.index + found.span).map((l) => l.map((c) => c.text).join("|")));
+  const table: string[][] = [...lines.slice(0, headerIndex).map((l) => l.map((c) => c.text)), header.map((c) => c.text)];
+  for (const line of lines.slice(headerIndex + found.span)) {
     const texts = line.map((c) => c.text);
-    if (texts.join("|") === headerTexts.join("|")) continue; // header repeated on each page
+    if (headerLines.has(texts.join("|"))) continue; // header repeated on each page
     const row = header.map(() => "");
     for (const cell of line) {
       // The header column this cell overlaps most, or else the nearest one.

@@ -17,7 +17,9 @@ import {
   detectUnsupportedCurrency,
   finalizeStatement,
   type ParsedStatement,
+  readStatementLines,
   readStatementTable,
+  layoutHints,
   StatementError,
   type StatementRow,
 } from "@/lib/server/statement-parser";
@@ -99,8 +101,14 @@ export async function readStatement(
       break;
     }
   }
+  if (!parsed) {
+    // Second built-in try: line by line, using the running balance.
+    const read = readStatementLines(extracted.text, currency);
+    if (read && read.transactions.length > 0) parsed = finalizeStatement(read.transactions, read.skipped);
+  }
 
   if (!parsed) {
+    console.warn(`[statements] Built-in reader failed (${extracted.kind}); layout hints: ${layoutHints(extracted.text)}`);
     const ai = await aiExtractStatement(extracted.text, deps.providers ?? getProviders(), { fetchImpl: deps.fetchImpl, today: deps.now });
     parsed = finalizeStatement(ai.transactions, ai.rejected);
     method = "ai";

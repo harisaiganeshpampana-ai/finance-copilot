@@ -93,11 +93,48 @@ describe("AI extraction", () => {
   });
 
   it("gives a friendly error (and never leaks keys) when no provider can read it", async () => {
-    const fetchImpl = vi.fn(async () => new Response("quota", { status: 429 }));
+    const fetchImpl = vi.fn(async () => new Response("no credit", { status: 402 }));
     const err = await aiExtractStatement(TEXT, [GEMINI, OPENAI], { fetchImpl: fetchImpl as unknown as typeof fetch, today: TODAY }).catch((e) => e);
     expect(err.message).toMatch(/couldn't read the transactions/);
+    expect(fetchImpl).toHaveBeenCalledTimes(2); // no retry for "out of credit"
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain("secret");
     await expect(aiExtractStatement(TEXT, [])).rejects.toThrow(/couldn't read/);
+  });
+
+  it("retries a busy provider once, then says to try again in a minute", async () => {
+    const fetchImpl = vi.fn(async () => new Response("overloaded", { status: 503 }));
+    const err = await aiExtractStatement(TEXT, [GEMINI, OPENAI], { fetchImpl: fetchImpl as unknown as typeof fetch, today: TODAY, retryDelayMs: 0 }).catch((e) => e);
+    expect(err.message).toBe("Our AI reader is busy right now. Please try again in a minute.");
+    expect(fetchImpl).toHaveBeenCalledTimes(4); // each provider: try + one retry
+  });
+
+  it("succeeds when a busy provider recovers on the retry", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(new Response("busy", { status: 429 })).mockResolvedValueOnce(aiReply(GOOD));
+    const res = await aiExtractStatement(TEXT, [GEMINI], { fetchImpl: fetchImpl as unknown as typeof fetch, today: TODAY, retryDelayMs: 0 });
+    expect(res.transactions).toHaveLength(2);
+  });
+
+  it("never sends more than two chunks at once (provider rate limits)", async () => {
+    let active = 0;
+    let peak = 0;
+    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((r) => setTimeout(r, 5));
+      active--;
+      const chunk = JSON.parse(init.body as string).messages[1].content as string;
+      const amount = Number(/AMT (\d+)\.00/.exec(chunk)![1]);
+      return aiReply({ rows: [["2026-10-01", "x", -amount, null]] });
+    });
+    const text = Array.from({ length: 6 }, (_, i) => `01/10/2026 ITEM AMT ${i + 1}.00 ${"x".repeat(19_990)}`).join("\n");
+    const res = await aiExtractStatement(text, [GEMINI], { fetchImpl: fetchImpl as unknown as typeof fetch, today: TODAY });
+    expect(res.transactions.map((t) => t.amountMinor)).toEqual([-100, -200, -300, -400, -500, -600]); // order kept
+    expect(peak).toBe(2);
+  });
+
+  it("accepts the compact row format", () => {
+    const res = validateAiChunk({ currency: "INR", rows: [["2026-10-03", "Paid to SWIGGY", -450.5, 102049.5]] }, TEXT, TODAY)!;
+    expect(res.transactions).toEqual([{ date: "2026-10-03", description: "Paid to SWIGGY", amountMinor: -45_050, balanceMinor: 10_204_950 }]);
   });
 
   it("splits long statements into chunks and refuses very long ones", async () => {

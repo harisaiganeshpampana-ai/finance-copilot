@@ -482,3 +482,139 @@ export function parseStatementCsv(text: string, currency: CurrencyCode | null = 
   }
   return finalizeStatement(read.transactions, read.skipped);
 }
+
+// ---------- Line-by-line reader (PDFs whose columns don't line up) ----------
+
+const LINE_DATE =
+  /^\s*(\d{4}-\d{2}-\d{2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|\d{1,2}[-/. ][A-Za-z]{3,9}\.?[-/., ]+\d{2,4}|[A-Za-z]{3,9}\.? \d{1,2},? \d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AP]M)?)?(?=\s|$)/;
+// Money always has two decimals here, so reference numbers and cheque numbers aren't mistaken for amounts.
+const LINE_AMOUNT = /(?<![\w.,/])(-?\(?(?:₹|Rs\.?|\$|€|£)?\s?\d{1,3}(?:[,.']\d{2,3})*[.,]\d{2}\)?-?)(\s?(?:Dr|Cr|DR|CR)\b\.?)?(?![\w/])/g;
+const NOT_A_TRANSACTION = /\b(opening|closing|available|ledger) balance\b|\btotal\b|statement (period|date)|brought forward|carried forward|\bb\/f\b|\bc\/f\b/i;
+const MONEY_IN_WORDS = /\b(salary|credit|cr|deposit|refund|interest|reversal|cashback|received|neft cr|imps cr|upi\/cr)\b/i;
+
+type LineRow = { date: string; description: string; amount: number; sign: 1 | -1 | null; balance: number | null };
+
+/**
+ * Reads statements printed as lines: "date  description  amount  balance". When the
+ * amount has no Dr/Cr or minus sign, the change in the running balance tells whether money
+ * came in or went out. Returns null unless the balances agree with the amounts.
+ */
+export function readStatementLines(text: string, currency: CurrencyCode | null): { transactions: RawTransaction[]; skipped: number } | null {
+  const rawDates: string[] = [];
+  const pending: (Omit<LineRow, "date" | "amount" | "balance"> & { rawDate: string; amountText: string; balanceText: string | null })[] = [];
+  let skipped = 0;
+  const lines = text.split("\n").slice(0, MAX_STATEMENT_ROWS * 3);
+  for (const line of lines) {
+    const dm = LINE_DATE.exec(line);
+    if (!dm) {
+      // A wrapped description line (no date, no money) belongs to the transaction above.
+      const last = pending[pending.length - 1];
+      if (last && line.trim() && !LINE_AMOUNT.test(line) && line.trim().length < 120) last.description += ` ${line.trim()}`;
+      LINE_AMOUNT.lastIndex = 0;
+      continue;
+    }
+    let rest = line.slice(dm[0].length);
+    rest = rest.replace(LINE_DATE, ""); // a second "value date" column
+    const tokens = [...rest.matchAll(LINE_AMOUNT)];
+    if (tokens.length === 0 || NOT_A_TRANSACTION.test(rest) || /^\s*(to|-)\s*\d/.test(rest)) {
+      skipped++;
+      continue;
+    }
+    // Ignore 0.00 placeholders in empty Debit/Credit columns.
+    const useful = tokens.length >= 3 ? tokens.filter((t) => !/^[^1-9]*$/.test(t[1])) : tokens;
+    const amountTok = useful.length >= 2 ? useful[useful.length - 2] : useful[useful.length - 1];
+    const balanceTok = useful.length >= 2 ? useful[useful.length - 1] : null;
+    const marker = (amountTok[2] ?? "").trim().toLowerCase();
+    const negative = /^-|^\(|-$/.test(amountTok[1].trim());
+    pending.push({
+      rawDate: dm[1],
+      description: rest.slice(0, tokens[0].index).replace(/\s+/g, " ").trim(),
+      amountText: `${amountTok[1]}${amountTok[2] ?? ""}`,
+      balanceText: balanceTok ? `${balanceTok[1]}${balanceTok[2] ?? ""}` : null,
+      sign: marker.startsWith("dr") || negative ? -1 : marker.startsWith("cr") ? 1 : null,
+    });
+    rawDates.push(dm[1]);
+  }
+  if (pending.length === 0) return null;
+
+  const order = detectDateOrder(rawDates, currency);
+  const decimalComma = detectDecimalComma(pending.flatMap((p) => [p.amountText, p.balanceText ?? ""]));
+  const rows: LineRow[] = [];
+  for (const p of pending) {
+    const date = parseStatementDate(p.rawDate, order);
+    const amount = parseAmount(p.amountText, decimalComma);
+    const balance = p.balanceText ? parseAmount(p.balanceText, decimalComma) : null;
+    if (!date || !amount || amount.minor === 0) {
+      skipped++;
+      continue;
+    }
+    rows.push({
+      date,
+      description: p.description,
+      amount: Math.abs(amount.minor),
+      sign: p.sign,
+      balance: balance ? (balance.drCr === "dr" ? -Math.abs(balance.minor) : balance.minor) : null,
+    });
+  }
+  if (rows.length === 0) return null;
+
+  const unsigned = rows.filter((r) => r.sign === null);
+  if (unsigned.length > 0) {
+    // Which way does the balance run? Oldest-first: balance[i] = balance[i-1] ± amount[i].
+    const fits = (newestFirst: boolean) => {
+      let ok = 0;
+      for (let i = 0; i < rows.length; i++) {
+        const prev = newestFirst ? rows[i + 1] : rows[i - 1];
+        if (prev?.balance != null && rows[i].balance != null && Math.abs(rows[i].balance! - prev.balance) === rows[i].amount) ok++;
+      }
+      return ok;
+    };
+    const asc = fits(false);
+    const desc = fits(true);
+    const newestFirst = desc > asc;
+    const best = Math.max(asc, desc);
+    const withBalance = rows.filter((r) => r.balance !== null).length;
+    // Without enough agreeing balances, we can't tell money in from money out: let the AI try.
+    if (withBalance < 2 || best < Math.max(1, Math.floor((withBalance - 1) * 0.8))) return null;
+
+    const opening = /opening balance[^\d\n-]{0,40}(-?[\d.,]+\d)/i.exec(text);
+    const openingMinor = opening ? parseAmount(opening[1], decimalComma)?.minor ?? null : null;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (r.sign !== null) continue;
+      const prev = newestFirst ? rows[i + 1] : rows[i - 1];
+      const prevBalance = prev ? prev.balance : openingMinor;
+      if (r.balance !== null && prevBalance != null && Math.abs(r.balance - prevBalance) === r.amount) {
+        r.sign = r.balance >= prevBalance ? 1 : -1;
+      } else {
+        r.sign = MONEY_IN_WORDS.test(r.description) ? 1 : -1; // best guess for the very first row
+      }
+    }
+  }
+  return {
+    transactions: rows.map((r) => ({ date: r.date, description: r.description, amountMinor: r.amount * (r.sign ?? -1), balanceMinor: r.balance })),
+    skipped,
+  };
+}
+
+// ---------- Privacy-safe diagnostics ----------
+
+const HEADER_WORDS = /\b(date|description|narration|particulars|details|remarks|debit|credit|withdrawals?|deposits?|balance|amount|dr|cr)\b/gi;
+
+/**
+ * A short, anonymous picture of a statement's layout for the server log when reading fails,
+ * so the reader can be improved: likely header lines (digits masked) and the *shape* of two
+ * transaction lines (every letter -> "a", every digit -> "9"). No names, numbers or amounts.
+ */
+export function layoutHints(text: string): string {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const headers = lines
+    .filter((l) => l.length < 200 && (l.match(HEADER_WORDS)?.length ?? 0) >= 2)
+    .slice(0, 3)
+    .map((l) => l.replace(/\d/g, "9"));
+  const shapes = lines
+    .filter((l) => LINE_DATE.test(l))
+    .slice(0, 2)
+    .map((l) => l.slice(0, 160).replace(/[A-Za-z]/g, "a").replace(/\d/g, "9"));
+  return JSON.stringify({ lines: lines.length, headers, shapes });
+}

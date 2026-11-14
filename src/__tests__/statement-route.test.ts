@@ -49,7 +49,7 @@ describe("POST /api/statements/upload", () => {
   });
 
   it("allows enough time for AI reading", () => {
-    expect(maxDuration).toBe(60);
+    expect(maxDuration).toBe(180);
   });
 
   it("accepts PDF, Excel and CSV files, and passes the PDF password and chosen currency", async () => {
