@@ -2,29 +2,57 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
-// App-wide bank connection state (demo). No real bank is contacted: "connecting"
-// just flips this flag. Remembered in this browser via localStorage when available.
-// Replace with the real provider flow (e.g. Plaid Link + a server-side token exchange).
+// App-wide bank connection state, remembered in this browser (localStorage) when available.
+// Set by the Connect Bank flow: Plaid Link in Sandbox mode, or a simulated connection
+// when Plaid isn't configured. No real bank data is imported yet.
 
-export const DEMO_BANK = { name: "Meridian Bank", account: "Checking", last4: "4821" } as const;
+export type ConnectionMode = "sandbox" | "demo";
+export type BankConnection = { name: string; account: string; last4: string; mode: ConnectionMode };
 
-const STORAGE_KEY = "calmowe.bankConnected";
+export const DEMO_BANK: BankConnection = { name: "Meridian Bank", account: "Checking", last4: "4821", mode: "demo" };
+
+const STORAGE_KEY = "calmowe.bankConnection";
+const LEGACY_KEY = "calmowe.bankConnected"; // older boolean flag
 const listeners = new Set<() => void>();
-let memoryFallback = false;
+let memoryFallback: string | null = null;
 
-function read(): boolean {
+// useSyncExternalStore needs a stable snapshot, so parse once per raw value.
+let lastRaw: string | null | undefined;
+let lastParsed: BankConnection | null = null;
+
+function parse(raw: string | null): BankConnection | null {
+  if (raw === lastRaw) return lastParsed;
+  lastRaw = raw;
   try {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    return saved === null ? memoryFallback : saved === "true";
+    const v = raw ? JSON.parse(raw) : null;
+    lastParsed =
+      v && typeof v.name === "string" && typeof v.last4 === "string" && (v.mode === "sandbox" || v.mode === "demo")
+        ? { name: v.name.slice(0, 80), account: String(v.account ?? "Account").slice(0, 40), last4: v.last4.slice(-4), mode: v.mode }
+        : null;
+  } catch {
+    lastParsed = null;
+  }
+  return lastParsed;
+}
+
+function readRaw(): string | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (raw !== null) return raw;
+    if (window.localStorage.getItem(LEGACY_KEY) === "true") return JSON.stringify(DEMO_BANK);
+    return memoryFallback;
   } catch {
     return memoryFallback;
   }
 }
 
-function write(connected: boolean): void {
-  memoryFallback = connected;
+function write(connection: BankConnection | null): void {
+  const raw = connection ? JSON.stringify(connection) : null;
+  memoryFallback = raw;
   try {
-    window.localStorage.setItem(STORAGE_KEY, String(connected));
+    window.localStorage.removeItem(LEGACY_KEY);
+    if (raw) window.localStorage.setItem(STORAGE_KEY, raw);
+    else window.localStorage.removeItem(STORAGE_KEY);
   } catch {
     // Storage unavailable; memoryFallback keeps the state for this session.
   }
@@ -33,7 +61,7 @@ function write(connected: boolean): void {
 
 function subscribe(notify: () => void): () => void {
   listeners.add(notify);
-  const onStorage = (e: StorageEvent) => e.key === STORAGE_KEY && notify();
+  const onStorage = (e: StorageEvent) => (e.key === STORAGE_KEY || e.key === LEGACY_KEY) && notify();
   window.addEventListener("storage", onStorage);
   return () => {
     listeners.delete(notify);
@@ -43,12 +71,16 @@ function subscribe(notify: () => void): () => void {
 
 /** Test helper: back to "not connected". */
 export function resetBankForTests(): void {
-  write(false);
+  write(null);
 }
 
 export function useBankConnection() {
-  const connected = useSyncExternalStore(subscribe, read, () => false);
-  const connect = useCallback(() => write(true), []);
-  const disconnect = useCallback(() => write(false), []);
-  return { connected, connect, disconnect, bank: DEMO_BANK };
+  const bank = useSyncExternalStore(
+    subscribe,
+    () => parse(readRaw()),
+    () => null,
+  );
+  const connect = useCallback((connection: BankConnection = DEMO_BANK) => write(connection), []);
+  const disconnect = useCallback(() => write(null), []);
+  return { connected: bank !== null, bank, connect, disconnect };
 }

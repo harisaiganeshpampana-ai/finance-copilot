@@ -17,6 +17,7 @@
     "next-auth": "^4.24.15",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "react-plaid-link": "^5.0.0",
     "recharts": "^3.10.1",
     "sonner": "^2.0.8"
   },

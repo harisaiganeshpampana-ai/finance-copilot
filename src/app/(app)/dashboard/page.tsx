@@ -5,6 +5,7 @@ import { DashboardError, DashboardSkeleton, DashboardView } from "@/components/d
 import type { FinancialData } from "@/data/mockTransactions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getFinancialData } from "@/lib/server/transactions";
+import { isOnWaitlist } from "@/lib/server/waitlist";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -17,14 +18,19 @@ async function UserDashboard() {
   if (!user) redirect("/login?callbackUrl=%2Fdashboard");
 
   let data: FinancialData;
+  let waitlistJoined = false;
   try {
-    data = await getFinancialData(user.id);
+    // Waitlist status is a nice-to-have: if it fails, show the button anyway.
+    [data, waitlistJoined] = await Promise.all([
+      getFinancialData(user.id),
+      isOnWaitlist(user.id).catch(() => false),
+    ]);
   } catch (err) {
     unstable_rethrow(err); // never swallow Next.js internal signals
     console.error("[dashboard] Could not load data:", err instanceof Error ? err.message : err);
     return <DashboardError />;
   }
-  return <DashboardView data={data} />;
+  return <DashboardView data={data} waitlistJoined={waitlistJoined} />;
 }
 
 export default function DashboardPage() {

@@ -17,6 +17,7 @@ import {
 import { Money } from "@/components/currency/currency-store";
 import { SpendingChart } from "@/components/dashboard/SpendingChart";
 import { GenerateSampleDataButton } from "@/components/dashboard/GenerateSampleDataButton";
+import { WaitlistCard } from "@/components/dashboard/WaitlistCard";
 import { type Category, type FinancialData, MOCK_EXCHANGE_RATES } from "@/data/mockTransactions";
 import { dailySpending, formatPercent, monthTotals, percentChange, totalBalanceCents } from "@/lib/insights";
 
@@ -66,9 +67,9 @@ function StatCard({
 }
 
 /** The dashboard for one user's financial data (from MongoDB in the app, or mock data in tests). */
-export function DashboardView({ data }: { data: FinancialData }) {
+export function DashboardView({ data, waitlistJoined = false }: { data: FinancialData; waitlistJoined?: boolean }) {
   const { transactions: all, openingBalanceCents, asOf } = data;
-  if (all.length === 0) return <EmptyDashboard />;
+  if (all.length === 0) return <EmptyDashboard waitlistJoined={waitlistJoined} />;
 
   const balance = totalBalanceCents(openingBalanceCents, all);
   const trend = percentChange(openingBalanceCents, balance);
@@ -129,6 +130,8 @@ export function DashboardView({ data }: { data: FinancialData }) {
           </div>
           <SpendingChart data={chartData} />
         </section>
+
+        <WaitlistCard initiallyJoined={waitlistJoined} />
 
         {/* Transactions */}
         <section
@@ -212,7 +215,7 @@ export function DashboardView({ data }: { data: FinancialData }) {
 }
 
 /** Shown when the user has no transactions yet (e.g. accounts created before sample data existed). */
-export function EmptyDashboard() {
+export function EmptyDashboard({ waitlistJoined = false }: { waitlistJoined?: boolean }) {
   return (
     <main className="flex flex-1 flex-col">
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center px-4 py-16 text-center">
@@ -226,6 +229,9 @@ export function EmptyDashboard() {
         </p>
         <div className="mt-8">
           <GenerateSampleDataButton />
+        </div>
+        <div className="mt-12 w-full text-left">
+          <WaitlistCard initiallyJoined={waitlistJoined} />
         </div>
       </div>
     </main>

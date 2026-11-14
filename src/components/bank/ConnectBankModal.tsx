@@ -1,19 +1,85 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { EyeOff, KeyRound, Landmark, Lock, ShieldCheck, Unlink, X, type LucideIcon } from "lucide-react";
+import {
+  CircleCheck,
+  EyeOff,
+  KeyRound,
+  Landmark,
+  Loader2,
+  Lock,
+  ShieldCheck,
+  Unlink,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { usePlaidLink, type PlaidLinkOnSuccessMetadata } from "react-plaid-link";
+import { type BankConnection, DEMO_BANK } from "./bank-store";
 
 const safetyPoints: { icon: LucideIcon; title: string; body: string }[] = [
   { icon: Lock, title: "Bank-grade encryption", body: "Your data is encrypted in transit and at rest." },
   { icon: EyeOff, title: "Read-only access", body: "CalmOwe can view balances and transactions. It can never move money." },
-  { icon: KeyRound, title: "Your login stays private", body: "You sign in with your bank directly. CalmOwe never sees your password." },
+  { icon: KeyRound, title: "Your login stays private", body: "You sign in with your bank through Plaid. CalmOwe never sees your password." },
   { icon: Unlink, title: "Disconnect anytime", body: "Revoke access with one click whenever you want." },
 ];
 
-export function ConnectBankModal({ onClose, onContinue }: { onClose: () => void; onContinue: () => void }) {
+/** How long the simulated connection takes when Plaid isn't configured. */
+export const SIMULATED_CONNECT_MS = 1200;
+
+/** Turns Plaid Link's success metadata into what CalmOwe shows in the sidebar. */
+export function connectionFromPlaid(metadata: Pick<PlaidLinkOnSuccessMetadata, "institution" | "accounts">): BankConnection {
+  const account = metadata.accounts?.[0];
+  return {
+    name: metadata.institution?.name || "Connected bank",
+    account: account?.name || "Account",
+    last4: (account?.mask || "0000").slice(-4),
+    mode: "sandbox",
+  };
+}
+
+type Stage =
+  | { name: "intro"; notice?: string }
+  | { name: "starting" }
+  | { name: "plaid"; token: string }
+  | { name: "simulating" }
+  | { name: "success"; connection: BankConnection }
+  | { name: "error"; message: string };
+
+/** Opens the Plaid Link UI (Sandbox) as soon as the SDK is ready. */
+function PlaidLinkLauncher({
+  token,
+  onSuccess,
+  onExit,
+}: {
+  token: string;
+  onSuccess: (metadata: PlaidLinkOnSuccessMetadata) => void;
+  onExit: () => void;
+}) {
+  // Mock response handler: we use Plaid's success metadata (bank name, account mask) to show
+  // the connection. The public_token isn't exchanged or stored yet (that's the production step).
+  const { open, ready } = usePlaidLink({ token, onSuccess: (_publicToken, metadata) => onSuccess(metadata), onExit });
+  useEffect(() => {
+    if (ready) open();
+  }, [ready, open]);
+  return (
+    <p className="flex items-center justify-center gap-2 py-6 text-sm text-zinc-400" role="status">
+      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+      Continue in the Plaid window...
+    </p>
+  );
+}
+
+export function ConnectBankModal({
+  onClose,
+  onConnected,
+}: {
+  onClose: () => void;
+  onConnected: (connection: BankConnection) => void;
+}) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
+  const [stage, setStage] = useState<Stage>({ name: "intro" });
 
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -49,13 +115,38 @@ export function ConnectBankModal({ onClose, onContinue }: { onClose: () => void;
     };
   }, [onClose]);
 
+  const succeed = (connection: BankConnection) => {
+    onConnected(connection);
+    setStage({ name: "success", connection });
+  };
+
+  const start = async () => {
+    setStage({ name: "starting" });
+    try {
+      const res = await fetch("/api/plaid/link-token", { method: "POST" });
+      const data: { mode?: string; linkToken?: string; error?: string } = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStage({ name: "error", message: data.error ?? "Couldn't start the bank connection. Please try again." });
+        return;
+      }
+      if (data.mode === "sandbox" && data.linkToken) {
+        setStage({ name: "plaid", token: data.linkToken });
+        return;
+      }
+      // Plaid isn't configured: simulate a successful connection.
+      setStage({ name: "simulating" });
+      await new Promise((r) => setTimeout(r, SIMULATED_CONNECT_MS));
+      succeed(DEMO_BANK);
+    } catch {
+      setStage({ name: "error", message: "Couldn't reach CalmOwe. Check your connection and try again." });
+    }
+  };
+
+  const busy = stage.name === "starting" || stage.name === "simulating" || stage.name === "plaid";
+
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-end justify-center p-4 sm:items-center">
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={busy ? undefined : onClose} aria-hidden="true" />
       <div
         ref={dialogRef}
         role="dialog"
@@ -73,59 +164,107 @@ export function ConnectBankModal({ onClose, onContinue }: { onClose: () => void;
           <X className="size-4" aria-hidden="true" />
         </button>
 
-        <div className="border-b border-zinc-800/80 bg-gradient-to-b from-zinc-900/80 to-zinc-950 px-6 pb-6 pt-8 text-center">
-          <div className="mx-auto flex w-fit items-center gap-2">
-            <span className="grid size-11 place-items-center rounded-xl border border-zinc-700 bg-zinc-900 text-white">
-              <Landmark className="size-5" aria-hidden="true" />
+        {stage.name === "success" ? (
+          <div className="px-6 pb-6 pt-10 text-center">
+            <span className="mx-auto grid size-14 place-items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+              <CircleCheck className="size-7" aria-hidden="true" />
             </span>
-            <span className="h-px w-6 bg-gradient-to-r from-zinc-700 to-emerald-500/60" aria-hidden="true" />
-            <span className="grid size-11 place-items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
-              <ShieldCheck className="size-5" aria-hidden="true" />
-            </span>
+            <h2 id="connect-bank-title" className="mt-5 text-lg font-semibold tracking-tight text-white">
+              Live Data Connected
+            </h2>
+            <p id="connect-bank-desc" className="mt-1.5 text-sm text-zinc-400">
+              {stage.connection.name} {stage.connection.account} &bull;&bull;&bull;&bull; {stage.connection.last4} is now
+              linked.
+            </p>
+            <p className="mt-3 inline-flex rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-300">
+              {stage.connection.mode === "sandbox" ? "Plaid Sandbox: test bank data" : "Demo: simulated connection"}
+            </p>
+            <button
+              ref={primaryRef}
+              type="button"
+              onClick={onClose}
+              className="mt-6 w-full rounded-md bg-white px-4 py-2.5 text-sm font-medium text-zinc-950 transition-colors hover:bg-zinc-200"
+            >
+              Done
+            </button>
           </div>
-          <h2 id="connect-bank-title" className="mt-5 text-lg font-semibold tracking-tight text-white">
-            Connect your bank securely
-          </h2>
-          <p id="connect-bank-desc" className="mx-auto mt-1.5 max-w-xs text-sm text-zinc-400">
-            Link your account to see real balances and transactions in CalmOwe.
-          </p>
-        </div>
-
-        <ul className="space-y-4 px-6 py-6">
-          {safetyPoints.map(({ icon: Icon, title, body }) => (
-            <li key={title} className="flex gap-3">
-              <span className="grid size-8 shrink-0 place-items-center rounded-md border border-zinc-800 bg-zinc-900 text-zinc-300">
-                <Icon className="size-4" aria-hidden="true" />
-              </span>
-              <div>
-                <p className="text-sm font-medium text-white">{title}</p>
-                <p className="text-xs leading-relaxed text-zinc-500">{body}</p>
+        ) : (
+          <>
+            <div className="border-b border-zinc-800/80 bg-gradient-to-b from-zinc-900/80 to-zinc-950 px-6 pb-6 pt-8 text-center">
+              <div className="mx-auto flex w-fit items-center gap-2">
+                <span className="grid size-11 place-items-center rounded-xl border border-zinc-700 bg-zinc-900 text-white">
+                  <Landmark className="size-5" aria-hidden="true" />
+                </span>
+                <span className="h-px w-6 bg-gradient-to-r from-zinc-700 to-emerald-500/60" aria-hidden="true" />
+                <span className="grid size-11 place-items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+                  <ShieldCheck className="size-5" aria-hidden="true" />
+                </span>
               </div>
-            </li>
-          ))}
-        </ul>
+              <h2 id="connect-bank-title" className="mt-5 text-lg font-semibold tracking-tight text-white">
+                Connect your bank securely
+              </h2>
+              <p id="connect-bank-desc" className="mx-auto mt-1.5 max-w-xs text-sm text-zinc-400">
+                Link your account through Plaid to see real balances and transactions in CalmOwe.
+              </p>
+            </div>
 
-        <div className="space-y-2 border-t border-zinc-800/80 px-6 py-5">
-          <button
-            ref={primaryRef}
-            type="button"
-            onClick={onContinue}
-            className="flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-2.5 text-sm font-medium text-zinc-950 transition-colors hover:bg-zinc-200"
-          >
-            <Lock className="size-4" aria-hidden="true" />
-            Continue to Secure Login
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full rounded-md px-4 py-2 text-sm text-zinc-400 transition-colors hover:text-white"
-          >
-            Cancel
-          </button>
-          <p className="pt-1 text-center text-[11px] text-zinc-600">
-            Demo: no real bank connection is made yet.
-          </p>
-        </div>
+            <ul className="space-y-4 px-6 py-6">
+              {safetyPoints.map(({ icon: Icon, title, body }) => (
+                <li key={title} className="flex gap-3">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-md border border-zinc-800 bg-zinc-900 text-zinc-300">
+                    <Icon className="size-4" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-white">{title}</p>
+                    <p className="text-xs leading-relaxed text-zinc-500">{body}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            <div className="space-y-2 border-t border-zinc-800/80 px-6 py-5">
+              {stage.name === "intro" && stage.notice && <p className="pb-1 text-center text-xs text-zinc-400">{stage.notice}</p>}
+              {stage.name === "error" && (
+                <p role="alert" className="pb-1 text-center text-xs text-rose-400">
+                  {stage.message}
+                </p>
+              )}
+
+              {stage.name === "plaid" ? (
+                <PlaidLinkLauncher
+                  token={stage.token}
+                  onSuccess={(metadata) => succeed(connectionFromPlaid(metadata))}
+                  onExit={() => setStage({ name: "intro", notice: "Connection cancelled. You can try again anytime." })}
+                />
+              ) : (
+                <button
+                  ref={primaryRef}
+                  type="button"
+                  onClick={() => void start()}
+                  disabled={busy}
+                  className="flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-2.5 text-sm font-medium text-zinc-950 transition-colors hover:bg-zinc-200 disabled:opacity-70"
+                >
+                  {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Lock className="size-4" aria-hidden="true" />}
+                  {stage.name === "starting"
+                    ? "Opening secure connection..."
+                    : stage.name === "simulating"
+                      ? "Connecting to your bank..."
+                      : "Connect Bank"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full rounded-md px-4 py-2 text-sm text-zinc-400 transition-colors hover:text-white"
+              >
+                Cancel
+              </button>
+              <p className="pt-1 text-center text-[11px] text-zinc-600">
+                Sandbox mode: no real bank data is imported yet.
+              </p>
+            </div>
+          </>
+        )}
       </div>
     </div>,
     document.body,

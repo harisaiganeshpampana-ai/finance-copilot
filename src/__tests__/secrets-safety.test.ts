@@ -47,6 +47,11 @@ describe("secret safety", () => {
     expect(config).toMatch(/logging:\s*\{\s*serverFunctions:\s*false\s*\}/);
   });
 
+  it("Plaid credentials are only read on the server", () => {
+    const readers = files.filter((f) => /env\.PLAID_(CLIENT_ID|SECRET)/.test(f.text)).map((f) => f.path);
+    expect(readers).toEqual(["lib/server/plaid.ts"]);
+  });
+
   it("Google OAuth credentials are only read by the auth config", () => {
     const readers = files.filter((f) => /process\.env\.GOOGLE_CLIENT_(ID|SECRET)|env\.GOOGLE_CLIENT_(ID|SECRET)/.test(f.text));
     expect(readers.map((f) => f.path)).toEqual(["lib/auth/options.ts"]);

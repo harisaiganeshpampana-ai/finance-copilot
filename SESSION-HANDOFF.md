@@ -34,6 +34,27 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 18: Plaid Sandbox Connect Bank + waitlist
+
+**What got done**
+- Installed `react-plaid-link` (Plaid Link SDK).
+- `POST /api/plaid/link-token` (logged-in only): with `PLAID_CLIENT_ID` + `PLAID_SECRET` set, creates a Plaid **Sandbox** link token (hard-wired to sandbox.plaid.com, never production); without keys returns `{ mode: "demo" }`. Secret stays server-side.
+- Connect Bank modal rebuilt with stages: intro, opening, Plaid Link (sandbox) or simulated connect (demo), success screen "Live Data Connected" with bank name, account mask and a Sandbox/Demo tag. Closing Plaid returns to the modal with a note.
+- Mock response handler: uses Plaid's success metadata (institution, account name, mask). The public token is not exchanged or stored yet.
+- Sidebar shows the connected bank (e.g. "First Platypus Bank, Plaid Checking •••• 0000 · Sandbox"); header pill reads "Live Data Connected" + mode tag.
+- Waitlist: `WaitlistEntry` model (one per user), server action `joinRealSyncWaitlist` (email from the session, never browser input; no duplicates), "Join Waitlist for Real Sync" card on the dashboard (also on the empty state); shows "You're on the waitlist" once joined.
+- Tests: rewritten `bank-connection.test.tsx` (sandbox + demo + cancel + error), `plaid-waitlist.test.ts`, `waitlist-ui.test.tsx`, Plaid secret-safety check. 283 tests total.
+
+**Blockers / decisions needed**
+- To open the real Plaid Link UI: create free Sandbox keys at dashboard.plaid.com and add `PLAID_CLIENT_ID` and `PLAID_SECRET` (Sandbox secret) to Vercel, then redeploy. Test login in Plaid Sandbox: `user_good` / `pass_good`.
+- Plaid doesn't cover Indian banks; for India use an Account Aggregator (Setu, Finvu, OneMoney).
+- Connection state is still stored in the browser (localStorage), not per user in MongoDB. Real sync needs: public-token exchange route, encrypted access-token storage per user, transaction import (source "bank").
+- Waitlist entries: MongoDB collection `waitlistentries`.
+
+**Tests**
+- [x] `npm test` passes (283)
+- [x] `npm run build` passes
+
 ### 2026-11-14 — Day 17: Multi-user data in MongoDB
 
 **Goal for today**
