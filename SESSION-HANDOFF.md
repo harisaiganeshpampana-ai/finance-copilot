@@ -34,6 +34,30 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 14: Pricing and legal pages
+
+**Goal for today**
+- Business infrastructure: pricing page and legal pages.
+
+**What got done**
+- `/pricing`: dark pricing page with 3 tiers. Basic (free: basic AI chat, 1 bank account), Pro ($9 or ₹499/mo, "Most popular", glowing border: unlimited AI chat, unlimited bank accounts, debt payoff plans), Enterprise (custom, for teams and families). $/₹ switch linked to the app-wide currency. Subscribe buttons show a "Checkout coming soon" toast (nothing is charged); Basic links to the dashboard.
+- `/terms` and `/privacy`: readable legal layout with table of contents and "Last updated: November 2026". Includes not-financial-advice, AI processing (names Gemini, OpenAI, DeepSeek), financial data security, read-only connections, subscriptions, user rights (GDPR, India DPDP Act 2023, California).
+- Shared marketing navbar and footer (`src/components/marketing/`). Navbar now has Pricing; footer has Terms of Service and Privacy Policy. Used on landing, pricing and legal pages.
+- Tests: `marketing-pages.test.tsx` (nav links, tiers, prices, ₹ switch, glow, checkout toast, legal clauses, table of contents). 170 tests total.
+
+**What's in progress (not finished)**
+- Nothing.
+
+**Blockers / decisions needed**
+- IMPORTANT: the Terms and Privacy Policy are a generated starting point, not legal advice. Have a lawyer review them before real users or payments (especially India DPDP Act and payments/refunds). "Governing law" is deliberately generic until the company's jurisdiction is set.
+- Set up the mailboxes legal@calmowe.com and privacy@calmowe.com (referenced in the pages), or change them.
+- Some promises must become true before launch: encryption at rest, read-only bank connections, provider no-training settings, cancellation/refund handling.
+- Pricing features (unlimited bank accounts, debt payoff plans, Enterprise team features) aren't built yet. Checkout needs a payment provider (e.g. Stripe or Razorpay).
+
+**Tests**
+- [x] `npm test` passes (170)
+- [x] `npm run build` passes
+
 ### 2026-11-14 — Day 13: calmowe.com live, branding finalized
 
 **Goal for today**

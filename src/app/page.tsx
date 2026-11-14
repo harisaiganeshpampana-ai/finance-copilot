@@ -7,20 +7,15 @@ import {
   EyeOff,
   KeyRound,
   Lock,
-  Menu,
   ServerCog,
   ShieldCheck,
   TrendingDown,
   type LucideIcon,
 } from "lucide-react";
-import { Logo } from "@/components/Logo";
+import { SiteFooter } from "@/components/marketing/SiteFooter";
+import { SiteHeader } from "@/components/marketing/SiteHeader";
 import { mockTransactions } from "@/data/mockTransactions";
 import { calculateBalanceCents, formatCents } from "@/lib/balance";
-
-const navLinks = [
-  { label: "Features", href: "#features" },
-  { label: "Security", href: "#security" },
-];
 
 const features: { icon: LucideIcon; title: string; body: string }[] = [
   {
@@ -46,62 +41,6 @@ const securityPoints: { icon: LucideIcon; title: string; body: string }[] = [
   { icon: KeyRound, title: "Secrets stay server-side", body: "Keys and tokens never reach the browser." },
   { icon: ServerCog, title: "Validated on the server", body: "Every request is checked before it is processed." },
 ];
-
-function NavBar() {
-  return (
-    <header className="sticky top-0 z-50 border-b border-zinc-800/80 bg-zinc-950/70 backdrop-blur-md">
-      <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6" aria-label="Main">
-        <Logo />
-
-        <div className="hidden items-center gap-8 text-sm text-zinc-400 md:flex">
-          {navLinks.map((l) => (
-            <a key={l.href} href={l.href} className="transition-colors hover:text-white">
-              {l.label}
-            </a>
-          ))}
-        </div>
-
-        <div className="hidden items-center gap-3 md:flex">
-          <Link href="/dashboard" className="px-3 py-2 text-sm text-zinc-400 transition-colors hover:text-white">
-            Login
-          </Link>
-          <Link
-            href="/dashboard"
-            className="rounded-md bg-white px-4 py-2 text-sm font-medium text-zinc-950 transition-colors hover:bg-zinc-200"
-          >
-            Get Started
-          </Link>
-        </div>
-
-        {/* Mobile menu: native <details>, no client JavaScript needed */}
-        <details className="group relative md:hidden">
-          <summary
-            className="flex size-9 cursor-pointer list-none items-center justify-center rounded-md border border-zinc-800 text-zinc-300 [&::-webkit-details-marker]:hidden"
-            aria-label="Open menu"
-          >
-            <Menu className="size-4" aria-hidden="true" />
-          </summary>
-          <div className="absolute right-0 mt-2 w-56 rounded-lg border border-zinc-800 bg-zinc-900 p-2 shadow-2xl">
-            {navLinks.map((l) => (
-              <a key={l.href} href={l.href} className="block rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800">
-                {l.label}
-              </a>
-            ))}
-            <Link href="/dashboard" className="block rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800">
-              Login
-            </Link>
-            <Link
-              href="/dashboard"
-              className="mt-1 block rounded-md bg-white px-3 py-2 text-center text-sm font-medium text-zinc-950"
-            >
-              Get Started
-            </Link>
-          </div>
-        </details>
-      </nav>
-    </header>
-  );
-}
 
 function ProductPreview() {
   const balance = calculateBalanceCents(mockTransactions);
@@ -285,44 +224,17 @@ function CallToAction() {
   );
 }
 
-function Footer() {
-  return (
-    <footer className="border-t border-zinc-800/80">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 text-sm text-zinc-500 sm:px-6 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-4">
-          <Logo />
-          <span>&copy; 2026 CalmOwe</span>
-        </div>
-        <nav className="flex gap-6" aria-label="Footer">
-          <a href="#features" className="hover:text-zinc-300">
-            Features
-          </a>
-          <a href="#security" className="hover:text-zinc-300">
-            Security
-          </a>
-          <Link href="/dashboard" className="hover:text-zinc-300">
-            Dashboard
-          </Link>
-        </nav>
-      </div>
-      <p className="mx-auto max-w-6xl px-4 pb-10 text-xs text-zinc-600 sm:px-6">
-        CalmOwe provides cash-flow and debt guidance. It does not provide investment advice.
-      </p>
-    </footer>
-  );
-}
-
 export default function Home() {
   return (
     <div className="min-h-full flex-1 bg-zinc-950 text-zinc-100 antialiased selection:bg-white selection:text-zinc-950">
-      <NavBar />
+      <SiteHeader />
       <main>
         <Hero />
         <Features />
         <Security />
         <CallToAction />
       </main>
-      <Footer />
+      <SiteFooter />
     </div>
   );
 }
