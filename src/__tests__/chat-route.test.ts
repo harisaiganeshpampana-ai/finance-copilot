@@ -141,6 +141,19 @@ describe("POST /api/chat", () => {
     const system: string = sentBody().messages[0].content;
     expect(system).toContain("1 USD = 83.5 INR = 0.92 EUR = 0.79 GBP");
     expect(system).toContain("thousands separators");
+    expect(system).toContain("Never treat a rupee amount as dollars");
+  });
+
+  it("attaches exact server-computed conversions to the question (₹5,000 = $59.88)", async () => {
+    await chat({ message: "Can I afford a ₹5,000 purchase?", currency: "USD" });
+    const userTurn: string = sentBody().messages.at(-1).content;
+    expect(userTurn.startsWith("Can I afford a ₹5,000 purchase?")).toBe(true);
+    expect(userTurn).toContain('"₹5,000" means ₹5,000.00 (INR) = $59.88 USD.');
+  });
+
+  it("leaves questions without amounts unchanged", async () => {
+    await chat({ message: "Review my spending this week" });
+    expect(sentBody().messages.at(-1)).toEqual({ role: "user", content: "Review my spending this week" });
   });
 
   it("passes valid conversation history", async () => {

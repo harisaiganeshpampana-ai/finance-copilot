@@ -47,7 +47,8 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 - Sidebar "AI Copilot" now goes to `/copilot` and is highlighted there.
 - Removed the chat bar from the dashboard (and the old `CopilotBar` component). Chat logic now lives in a reusable hook `useCopilotChat`.
 - Backend unchanged apart from the prompt: the AI still gets the mock transaction data from the server, now also all four demo exchange rates (so "₹5,000" converts correctly in any display currency) and an instruction to format amounts with thousands separators.
-- Tests: `copilot-page.test.tsx` (nav highlight, empty state, chips, typed messages, history, errors, new chat, no emojis). 100 tests total.
+- Tests: `copilot-page.test.tsx` (nav highlight, empty state, chips, typed messages, history, errors, new chat, no emojis).
+- Bug found in live test: the AI read "₹5,000" as $5,000. Fix: the server now finds money amounts in each question (₹/Rs/INR, $, €, £, or words like "rupees") and appends exact conversions (e.g. ₹5,000 = $59.88) before asking the AI (`src/lib/currency-hints.ts`). Prompt also tells it never to treat rupees as dollars. 120 tests total.
 
 **What's in progress (not finished)**
 - Nothing.

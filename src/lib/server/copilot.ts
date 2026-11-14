@@ -8,6 +8,7 @@ import {
   mockTransactions,
 } from "@/data/mockTransactions";
 import { type CurrencyCode, isCurrencyCode } from "@/lib/currency";
+import { currencyHints } from "@/lib/currency-hints";
 import { dailySpending, monthTotals, totalBalanceCents } from "@/lib/insights";
 
 // ---------- Provider config ----------
@@ -125,6 +126,7 @@ export function buildSystemPrompt(currency: CurrencyCode): string {
     "Never give investment advice. Do not recommend buying, selling, or holding any stock, fund, ETF, bond, crypto, or other security, and do not suggest where to invest. If asked, briefly say you can only help with cash flow and debt, then offer a related cash-flow or debt answer.",
     "You are not a licensed financial advisor; for major decisions, suggest consulting one.",
     `Show money amounts in ${currency}. All amounts in the data are USD; convert at 1 USD = ${rate} ${currency} (fixed demo rate).`,
+    "Read currency symbols carefully: ₹ or Rs means Indian rupees (INR), $ means US dollars, € means euros, £ means pounds. Never treat a rupee amount as dollars. When the user's message includes 'Exact currency conversions computed by CalmOwe', use those figures exactly.",
     `If the user mentions an amount in another currency, convert it with these fixed demo rates: 1 USD = ${MOCK_EXCHANGE_RATES.INR} INR = ${MOCK_EXCHANGE_RATES.EUR} EUR = ${MOCK_EXCHANGE_RATES.GBP} GBP.`,
     "Format amounts with thousands separators and the currency symbol (e.g. $14,922.54 or ₹12,46,032.09 using Indian grouping for INR).",
     "Reply in plain text without markdown, in under 120 words. Be specific and use the user's actual numbers.",
@@ -184,6 +186,16 @@ export class AllProvidersFailedError extends Error {
 
 const PER_PROVIDER_TIMEOUT_MS = 20_000;
 
+/**
+ * Appends exact, server-computed conversions for any money amounts in the question
+ * (e.g. "₹5,000" = $59.88), so the AI doesn't misread or miscalculate currencies.
+ */
+export function withCurrencyHints(message: string, currency: CurrencyCode): string {
+  const hints = currencyHints(message, currency, MOCK_EXCHANGE_RATES);
+  if (hints.length === 0) return message;
+  return `${message}\n\n[Exact currency conversions computed by CalmOwe; use these figures: ${hints.join(" ")}]`;
+}
+
 export async function askCopilot(
   provider: Provider,
   request: ChatRequest,
@@ -202,7 +214,7 @@ export async function askCopilot(
       messages: [
         { role: "system", content: buildSystemPrompt(request.currency) },
         ...request.history,
-        { role: "user", content: request.message },
+        { role: "user", content: withCurrencyHints(request.message, request.currency) },
       ],
     }),
     signal: AbortSignal.timeout(PER_PROVIDER_TIMEOUT_MS),
