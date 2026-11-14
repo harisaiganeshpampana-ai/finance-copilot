@@ -34,6 +34,29 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 11: Structured AI context and strict prompt
+
+**Goal for today**
+- Make Copilot answers strictly data-based: structured JSON context, strict system prompt, data sent with each question.
+
+**What got done**
+- Context (`buildFinancialContext` in `src/lib/server/copilot.ts`) is now clean JSON with numeric amounts: `summary` (currentBalance, totalIncome, totalExpenses, netCashFlow, openingBalance, period), `upcomingExpenses`, `balanceAfterUpcomingExpenses`, `spendingLast7Days`, `transactions`. All totals are calculated on the server.
+- New: upcoming expenses are estimated from recurring bills (rent, utilities, subscriptions repeating monthly, next 30 days): rent $1,450 on Dec 1, power $112.40 on Dec 9, StreamBox $15.49 on Dec 11 = $1,577.89; balance after them $13,344.65 (`estimateUpcomingBills` in `src/lib/insights.ts`).
+- System prompt rewritten around: "You are CalmOwe, an expert AI financial copilot... base every answer strictly on the provided transaction data... balance minus the cost, and factor in upcoming expenses... do not make up numbers... say if data is insufficient... no investment advice."
+- Each question is sent as "Here is my current financial data: {JSON}. My question is: {question}" (plus exact currency conversions when the question has amounts).
+- Loading state now reads "CalmOwe is analyzing your data..."
+- Tests: `copilot-context.test.ts` (date math, upcoming bills, context totals, JSON formatting, system prompt wording, prompt format); route tests updated. 141 tests total.
+
+**What's in progress (not finished)**
+- Nothing.
+
+**Blockers / decisions needed**
+- Upcoming bills are an estimate from mock data. With real bank data, recurring-bill detection needs to be more robust (amount changes, irregular dates).
+
+**Tests**
+- [x] `npm test` passes (141)
+- [x] `npm run build` passes
+
 ### 2026-11-14 — Day 10: Dedicated /copilot page
 
 **Goal for today**

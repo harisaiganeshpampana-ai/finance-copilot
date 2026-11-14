@@ -141,8 +141,8 @@ export function CopilotChat() {
                 <span className="grid size-8 shrink-0 place-items-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-300">
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 </span>
-                <span className="flex items-center gap-1 text-sm text-zinc-500">
-                  Thinking
+                <span className="flex items-center gap-1.5 text-sm text-zinc-500">
+                  CalmOwe is analyzing your data
                   <span className="inline-flex gap-0.5" aria-hidden="true">
                     <span className="size-1 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.3s]" />
                     <span className="size-1 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.15s]" />

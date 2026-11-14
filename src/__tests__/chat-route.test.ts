@@ -82,7 +82,8 @@ describe("POST /api/chat", () => {
     expect(sentHeaders().Authorization).toBe(`Bearer ${GEMINI_KEY}`);
     expect(sentBody().model).toBe("gemini-2.5-flash");
     expect(sentBody().reasoning_effort).toBe("none");
-    expect(sentBody().messages.at(-1)).toEqual({ role: "user", content: "Can I afford a $300 phone?" });
+    expect(sentBody().messages.at(-1).role).toBe("user");
+    expect(sentBody().messages.at(-1).content.endsWith("My question is: Can I afford a $300 phone?")).toBe(true);
   });
 
   it("falls back to OpenAI (gpt-4o-mini) when Gemini fails", async () => {
@@ -125,15 +126,19 @@ describe("POST /api/chat", () => {
     expect(text).not.toContain("secret detail");
   });
 
-  it("sends the mock transaction data as context and forbids investment advice", async () => {
+  it("sends a strict system prompt and the structured JSON data with the question", async () => {
     await chat({ message: "What did I spend?", currency: "INR" });
-    const system: string = sentBody().messages[0].content;
-    expect(sentBody().messages[0].role).toBe("system");
-    expect(system).toContain("Acme Corp Payroll");
-    expect(system).toContain("Oakwood Apartments Rent");
-    expect(system).toContain('"currentBalance":"14922.54"');
-    expect(system).toContain("Never give investment advice");
-    expect(system).toContain("1 USD = 83.5 INR");
+    const [system, user] = sentBody().messages;
+    expect(system.role).toBe("system");
+    expect(system.content).toContain("You are CalmOwe, an expert AI financial copilot.");
+    expect(system.content).toContain("Do not provide investment advice.");
+    expect(system.content).toContain("1 USD = 83.5 INR");
+    expect(system.content).not.toContain("Acme Corp Payroll"); // data travels with the question
+    expect(user.role).toBe("user");
+    expect(user.content.startsWith("Here is my current financial data:\n{")).toBe(true);
+    expect(user.content).toContain('"currentBalance": 14922.54');
+    expect(user.content).toContain("Acme Corp Payroll");
+    expect(user.content.endsWith("My question is: What did I spend?")).toBe(true);
   });
 
   it("gives the AI all demo exchange rates so it can convert amounts like ₹5,000", async () => {
@@ -147,13 +152,15 @@ describe("POST /api/chat", () => {
   it("attaches exact server-computed conversions to the question (₹5,000 = $59.88)", async () => {
     await chat({ message: "Can I afford a ₹5,000 purchase?", currency: "USD" });
     const userTurn: string = sentBody().messages.at(-1).content;
-    expect(userTurn.startsWith("Can I afford a ₹5,000 purchase?")).toBe(true);
+    expect(userTurn).toContain("My question is: Can I afford a ₹5,000 purchase?");
     expect(userTurn).toContain('"₹5,000" means ₹5,000.00 (INR) = $59.88 USD.');
   });
 
-  it("leaves questions without amounts unchanged", async () => {
+  it("adds no conversion note when the question has no amounts", async () => {
     await chat({ message: "Review my spending this week" });
-    expect(sentBody().messages.at(-1)).toEqual({ role: "user", content: "Review my spending this week" });
+    const userTurn: string = sentBody().messages.at(-1).content;
+    expect(userTurn.endsWith("My question is: Review my spending this week")).toBe(true);
+    expect(userTurn).not.toContain("Exact currency conversions");
   });
 
   it("passes valid conversation history", async () => {
@@ -162,7 +169,10 @@ describe("POST /api/chat", () => {
       { role: "assistant", content: "$14,922.54." },
     ];
     await chat({ message: "And after rent?", history });
-    expect(sentBody().messages.slice(1)).toEqual([...history, { role: "user", content: "And after rent?" }]);
+    const turns = sentBody().messages.slice(1);
+    expect(turns.slice(0, 2)).toEqual(history);
+    expect(turns[2].role).toBe("user");
+    expect(turns[2].content.endsWith("My question is: And after rent?")).toBe(true);
   });
 
   it.each([

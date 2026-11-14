@@ -67,7 +67,7 @@ describe("/copilot page", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/chat");
     expect(sentBody()).toEqual({ message: "Can I afford a ₹5,000 purchase?", history: [], currency: "USD" });
     expect(screen.getByText("Can I afford a ₹5,000 purchase?").getAttribute("data-role")).toBe("user");
-    expect(screen.getByRole("status").textContent).toMatch(/thinking/i);
+    expect(screen.getByRole("status").textContent).toContain("CalmOwe is analyzing your data");
     expect(screen.queryByRole("heading", { name: /how can I help/ })).toBeNull(); // empty state gone
 
     resolveFetch(json({ reply: "Yes. ₹5,000 is about $59.88, well within your $14,922.54 balance." }));

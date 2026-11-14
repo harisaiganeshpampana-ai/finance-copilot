@@ -59,3 +59,43 @@ export function dailySpending(transactions: Transaction[], asOf: string, days = 
   }
   return series;
 }
+
+/** Adds one calendar month to an ISO date, clamping to the month's last day (Jan 31 -> Feb 28). */
+export function addOneMonth(date: string): string {
+  assertIsoDate(date);
+  const [y, m, d] = date.split("-").map(Number);
+  const year = m === 12 ? y + 1 : y;
+  const month = m === 12 ? 1 : m + 1;
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${year}-${String(month).padStart(2, "0")}-${String(Math.min(d, lastDay)).padStart(2, "0")}`;
+}
+
+/** Categories treated as monthly recurring bills when estimating what's coming up. */
+export const RECURRING_CATEGORIES = ["housing", "utilities", "subscriptions"] as const;
+
+export type UpcomingBill = { merchant: string; category: string; expectedDate: string; amountCents: number };
+
+/**
+ * Estimates bills due in the next `horizonDays` after `asOf`, assuming each recurring
+ * expense (rent, utilities, subscriptions) repeats one month after it last occurred.
+ * Amounts are positive cents. Sorted by expected date.
+ */
+export function estimateUpcomingBills(transactions: Transaction[], asOf: string, horizonDays = 30): UpcomingBill[] {
+  assertIsoDate(asOf);
+  const start = Date.parse(`${asOf}T00:00:00Z`);
+  const end = start + horizonDays * DAY_MS;
+  const latestByMerchant = new Map<string, Transaction>();
+  for (const t of transactions) {
+    if (t.amountCents >= 0 || t.date > asOf) continue;
+    if (!(RECURRING_CATEGORIES as readonly string[]).includes(t.category)) continue;
+    const prev = latestByMerchant.get(t.merchant);
+    if (!prev || t.date > prev.date) latestByMerchant.set(t.merchant, t);
+  }
+  return [...latestByMerchant.values()]
+    .map((t) => ({ merchant: t.merchant, category: t.category, expectedDate: addOneMonth(t.date), amountCents: 0 - t.amountCents }))
+    .filter((b) => {
+      const due = Date.parse(`${b.expectedDate}T00:00:00Z`);
+      return due > start && due <= end;
+    })
+    .sort((a, b) => a.expectedDate.localeCompare(b.expectedDate));
+}
