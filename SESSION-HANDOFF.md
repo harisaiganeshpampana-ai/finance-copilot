@@ -34,6 +34,32 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 13: calmowe.com live, branding finalized
+
+**Goal for today**
+- Domain is live; finalize metadata and branding.
+
+**What got done**
+- **calmowe.com is live** on Vercel.
+- Site metadata moved to `src/lib/site.ts` and used by the root layout:
+  - Title: "CalmOwe | AI Financial Copilot" (pages: "Dashboard | CalmOwe", etc.)
+  - Description: "Take absolute control of your cash flow with CalmOwe. Your AI-powered personal finance copilot."
+  - `metadataBase` = https://calmowe.com, so share previews and canonical links use the real domain; Open Graph and Twitter card set.
+- Favicon: kept the Level C mark (`src/app/icon.svg`, plus apple-icon and share image). There is no `logo.png`, and using a generic Lucide icon would split the brand.
+- Old names: none in the UI. Internal package renamed to `calmowe`; CLAUDE.md updated. Only the GitHub repo is still called `finance-copilot`.
+- Tests: `branding.test.ts` (title, description, domain, layout wiring, no old names anywhere in `src`). 158 tests total.
+
+**What's in progress (not finished)**
+- Nothing.
+
+**Blockers / decisions needed**
+- Optional: rename the GitHub repo to `calmowe` (GitHub redirects the old URL; Vercel keeps working).
+- Still open from earlier: trademark search for "CalmOwe", social handles.
+
+**Tests**
+- [x] `npm test` passes (158)
+- [x] `npm run build` passes
+
 ### 2026-11-14 — Day 12: Logo ("Level C")
 
 **Goal for today**

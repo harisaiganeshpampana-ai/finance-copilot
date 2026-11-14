@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { siteMetadata } from "@/lib/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,14 +13,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "CalmOwe — Cash flow and debt, under control",
-    template: "%s · CalmOwe",
-  },
-  description:
-    "CalmOwe shows where your money goes, what's coming up, and which debt to pay down first.",
-};
+// Title, description, domain and share-preview settings live in src/lib/site.ts.
+export const metadata: Metadata = siteMetadata;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

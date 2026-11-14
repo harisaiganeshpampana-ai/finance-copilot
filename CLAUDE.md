@@ -1,6 +1,6 @@
 # CalmOwe (Finance Copilot) — Project Rules
 
-Product name: **CalmOwe** (domain to register: calmowe.com). The repo/folder is still named `finance-copilot`.
+Product name: **CalmOwe**. Live at https://calmowe.com (Vercel). The GitHub repo is still named `finance-copilot`.
 
 These rules are non-negotiable. Follow them in every change.
 
