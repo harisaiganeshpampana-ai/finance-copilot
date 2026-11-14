@@ -75,14 +75,11 @@ describe("Dashboard (/dashboard)", () => {
     expect(within(table).getByText("Acme Corp Payroll")).toBeTruthy();
   });
 
-  it("has a Copilot input that does not send anything yet", () => {
+  it("shows the Copilot chat input (chat behavior is tested in copilot-chat.test.tsx)", () => {
     renderDashboard();
-    const input = screen.getByLabelText("Ask the AI Copilot");
-    const send = screen.getByRole("button", { name: "Send question" });
-    expect((send as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(input, { target: { value: "Can I afford a $300 phone?" } });
-    fireEvent.click(send);
-    expect(screen.getByRole("status").textContent).toMatch(/isn't connected yet/i);
+    expect(screen.getByLabelText("Ask the AI Copilot")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Send question" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText(/isn't connected yet/i)).toBeNull();
   });
 
   it("has a currency selector with USD, INR, EUR and GBP", () => {

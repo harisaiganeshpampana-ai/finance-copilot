@@ -34,6 +34,34 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 9: AI Copilot connected
+
+**Goal for today**
+- Connect the dashboard Copilot chat to a real AI model through a secure backend route.
+
+**What got done**
+- New server route `POST /api/chat` (`src/app/api/chat/route.ts`, logic in `src/lib/server/copilot.ts`).
+  - Reads `DEEPSEEK_API_KEY` (model `deepseek-chat`), or falls back to `OPENAI_API_KEY` (model `gpt-4o-mini`). Keys are read only on the server.
+  - Validates every request on the server: question 1-500 chars, up to 10 history turns (user/assistant only, max 2000 chars each), supported currency.
+  - Builds the financial context on the server from our data (balance, month income/expenses, last-7-days spending, all transactions). The browser never sends financial data.
+  - System prompt: cash flow and debt only, never investment advice, use only the given data, plain text under 120 words, amounts in the user's selected currency.
+  - Errors: 400 invalid input, 429 rate limit (10/min per IP, best-effort per server instance), 503 no key configured, 502 AI failure. Provider error details and keys are never sent to the browser.
+- Chat UI in the Copilot bar: user bubbles (right, indigo), Copilot bubbles (left), "Thinking..." spinner, error bubbles, Clear button, follow-up questions keep context. Removed the "isn't connected yet" notice.
+- Tests: route with mocked AI responses (`chat-route.test.ts`), chat UI (`copilot-chat.test.tsx`), and a secret-safety check that fails if any non-server file reads API keys (`secrets-safety.test.ts`). 96 tests total.
+
+**What's in progress (not finished)**
+- Nothing.
+
+**Blockers / decisions needed**
+- Vercel env var must be named exactly `DEEPSEEK_API_KEY` or `OPENAI_API_KEY`, and enabled for the Production (and Preview, if wanted) environment.
+- Local dev has no key, so the chat replies "isn't configured yet". To test locally: `vercel env pull .env.local` (or create `.env.local` with the key; it is git-ignored).
+- The rate limit is per server instance. For real traffic, use a shared limiter (e.g. Upstash/Vercel KV) and require login.
+- The AI still answers from mock data.
+
+**Tests**
+- [x] `npm test` passes (96)
+- [x] `npm run build` passes
+
 ### 2026-11-14 — Day 8: Name chosen: CalmOwe
 
 **Goal for today**
