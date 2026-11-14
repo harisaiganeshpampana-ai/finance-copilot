@@ -2,11 +2,11 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
-// App-wide bank connection state, remembered in this browser (localStorage) when available.
-// Set by the Connect Bank flow: Plaid Link in Sandbox mode, or a simulated connection
-// when Plaid isn't configured. No real bank data is imported yet.
+// App-wide bank connection state for the UI. The source of truth for real (Plaid) connections
+// is the user's MongoDB document; the sidebar syncs this store from the server on load.
+// "demo" connections (simulated, when Plaid isn't configured) live only in this browser.
 
-export type ConnectionMode = "sandbox" | "demo";
+export type ConnectionMode = "sandbox" | "production" | "demo";
 export type BankConnection = { name: string; account: string; last4: string; mode: ConnectionMode };
 
 export const DEMO_BANK: BankConnection = { name: "Meridian Bank", account: "Checking", last4: "4821", mode: "demo" };
@@ -26,7 +26,7 @@ function parse(raw: string | null): BankConnection | null {
   try {
     const v = raw ? JSON.parse(raw) : null;
     lastParsed =
-      v && typeof v.name === "string" && typeof v.last4 === "string" && (v.mode === "sandbox" || v.mode === "demo")
+      v && typeof v.name === "string" && typeof v.last4 === "string" && (v.mode === "sandbox" || v.mode === "production" || v.mode === "demo")
         ? { name: v.name.slice(0, 80), account: String(v.account ?? "Account").slice(0, 40), last4: v.last4.slice(-4), mode: v.mode }
         : null;
   } catch {

@@ -1,18 +1,39 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Landmark, Plus, Unlink } from "lucide-react";
 import { toast } from "sonner";
+import { disconnectBank, getBankConnectionStatus } from "@/app/(app)/bank-actions";
 import { type ConnectionMode, useBankConnection } from "./bank-store";
 import { ConnectBankModal } from "./ConnectBankModal";
 
-const modeLabel = (mode: ConnectionMode) => (mode === "sandbox" ? "Sandbox" : "Demo");
+const modeLabel = (mode: ConnectionMode) => (mode === "sandbox" ? "Sandbox" : mode === "demo" ? "Demo" : null);
 
-/** Sidebar card: "Connect Bank" button, or the connected bank with a Synced badge. */
+/** Sidebar card: prominent "Connect Bank" button, or the connected bank with a Synced badge. */
 export function BankConnectionCard() {
   const { bank, connect, disconnect } = useBankConnection();
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
+
+  // The user's real (Plaid) connection lives in MongoDB: sync it on load so it shows on
+  // every device. Simulated "demo" connections are browser-only and left alone.
+  useEffect(() => {
+    let cancelled = false;
+    getBankConnectionStatus()
+      .then((server) => {
+        if (cancelled) return;
+        if (server) connect({ name: server.name, account: server.account, last4: server.last4, mode: server.mode });
+        else if (bank && bank.mode !== "demo") disconnect();
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // Run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const label = bank ? modeLabel(bank.mode) : null;
 
   return (
     <>
@@ -31,15 +52,24 @@ export function BankConnectionCard() {
                 </span>
               </div>
               <p className="text-xs text-zinc-500 tabular-nums">
-                {bank.account} &bull;&bull;&bull;&bull; {bank.last4} &middot; {modeLabel(bank.mode)}
+                {bank.account} &bull;&bull;&bull;&bull; {bank.last4}
+                {label ? ` · ${label}` : ""}
               </p>
             </div>
           </div>
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
+              const name = bank.name;
+              if (bank.mode !== "demo") {
+                const result = await disconnectBank();
+                if (!result.ok) {
+                  toast.error("Couldn't disconnect", { description: "Please try again." });
+                  return;
+                }
+              }
               disconnect();
-              toast("Bank disconnected", { description: `${bank.name} is no longer linked.` });
+              toast("Bank disconnected", { description: `${name} is no longer linked.` });
             }}
             className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-zinc-800 px-3 py-1.5 text-xs text-zinc-400 transition-colors hover:border-zinc-700 hover:text-white"
           >
@@ -66,8 +96,10 @@ export function BankConnectionCard() {
           onClose={close}
           onConnected={(connection) => {
             connect(connection);
-            toast.success("Live Data Connected", {
-              description: `${connection.name} ${connection.account} •••• ${connection.last4} (${modeLabel(connection.mode)})`,
+            close();
+            const tag = modeLabel(connection.mode);
+            toast.success("Bank connected successfully!", {
+              description: `${connection.name} ${connection.account} •••• ${connection.last4}${tag ? ` (${tag})` : ""}`,
             });
           }}
         />
@@ -79,6 +111,7 @@ export function BankConnectionCard() {
 /** Header pill: "Demo data" until a bank is connected, then "Live Data Connected" (with its mode). */
 export function DataSourcePill() {
   const { bank } = useBankConnection();
+  const label = bank ? modeLabel(bank.mode) : null;
   return bank ? (
     <span
       className="hidden items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 py-1 pl-2.5 pr-1 text-xs font-medium text-emerald-400 md:inline-flex"
@@ -88,8 +121,10 @@ export function DataSourcePill() {
         <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60" />
         <span className="relative inline-flex size-1.5 rounded-full bg-emerald-400" />
       </span>
-      <span data-testid="data-source-label">Live Data Connected</span>
-      <span className="rounded-full bg-amber-500/15 px-1.5 py-px text-[10px] text-amber-300">{modeLabel(bank.mode)}</span>
+      <span data-testid="data-source-label" className={label ? "" : "pr-1.5"}>
+        Live Data Connected
+      </span>
+      {label && <span className="rounded-full bg-amber-500/15 px-1.5 py-px text-[10px] text-amber-300">{label}</span>}
     </span>
   ) : (
     <span

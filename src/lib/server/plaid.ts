@@ -1,50 +1,68 @@
-// SERVER-ONLY. Plaid (Sandbox) helpers. Plaid keys are read from the server environment
-// and never sent to the browser.
-//
-// This is deliberately locked to Plaid's Sandbox: it can't touch real bank accounts.
-// Going live later means production keys, a token exchange route, and encrypted storage
-// of Plaid access tokens.
+// SERVER-ONLY. Plaid helpers using the official Plaid Node SDK. Plaid keys are read from the
+// server environment and never sent to the browser.
 
-export const PLAID_SANDBOX_URL = "https://sandbox.plaid.com";
+import { Plaid, PlaidClient, PlaidEnvironment } from "plaid";
 
-export function plaidCredentials(env: NodeJS.ProcessEnv = process.env): { clientId: string; secret: string } | null {
+export type PlaidEnvName = "sandbox" | "production";
+
+export type PlaidConfig = { clientId: string; secret: string; env: PlaidEnvName };
+
+/** Plaid settings from the server environment, or null if keys aren't configured. */
+export function plaidConfig(env: NodeJS.ProcessEnv = process.env): PlaidConfig | null {
   const clientId = env.PLAID_CLIENT_ID?.trim();
   const secret = env.PLAID_SECRET?.trim();
-  return clientId && secret ? { clientId, secret } : null;
+  if (!clientId || !secret) return null;
+  // Anything other than an explicit "production" uses Sandbox (safe default).
+  const plaidEnv: PlaidEnvName = env.PLAID_ENV?.trim().toLowerCase() === "production" ? "production" : "sandbox";
+  return { clientId, secret, env: plaidEnv };
 }
 
-export class PlaidError extends Error {
-  constructor(
-    message: string,
-    readonly status?: number,
-  ) {
-    super(message);
-  }
-}
+/** The subset of the Plaid SDK CalmOwe uses (lets tests pass a fake). */
+export type PlaidApi = {
+  link: { createToken(req: Plaid.LinkTokenCreateRequest): PromiseLike<{ link_token: string }> };
+  item: {
+    exchangePublicToken(req: Plaid.ItemPublicTokenExchangeRequest): PromiseLike<{ access_token: string; item_id: string }>;
+    remove(req: Plaid.ItemRemoveRequest): PromiseLike<unknown>;
+  };
+};
 
-/** Creates a Plaid Link token (Sandbox) for one CalmOwe user. */
-export async function createSandboxLinkToken(
-  userId: string,
-  creds: { clientId: string; secret: string },
-  fetchImpl: typeof fetch = fetch,
-): Promise<string> {
-  const res = await fetchImpl(`${PLAID_SANDBOX_URL}/link/token/create`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_id: creds.clientId,
-      secret: creds.secret,
-      client_name: "CalmOwe",
-      user: { client_user_id: userId },
-      products: ["transactions"],
-      country_codes: ["US"],
-      language: "en",
-    }),
-    signal: AbortSignal.timeout(15_000),
+export function createPlaidClient(config: PlaidConfig): PlaidApi {
+  return new PlaidClient({
+    environment: config.env === "production" ? PlaidEnvironment.Production : PlaidEnvironment.Sandbox,
+    clientId: config.clientId,
+    secret: config.secret,
+    timeoutInSeconds: 20,
   });
-  const data: { link_token?: unknown; error_code?: unknown } = await res.json().catch(() => ({}));
-  if (!res.ok || typeof data.link_token !== "string") {
-    throw new PlaidError(`Plaid link token failed: ${res.status} ${String(data.error_code ?? "")}`.trim(), res.status);
+}
+
+/** Creates a Plaid Link token for one CalmOwe user. */
+export async function createLinkToken(client: PlaidApi, userId: string): Promise<string> {
+  const res = await client.link.createToken({
+    client_name: "CalmOwe",
+    user: { client_user_id: userId },
+    products: ["transactions"],
+    country_codes: ["US"],
+    language: "en",
+  });
+  if (typeof res?.link_token !== "string") throw new Error("Plaid returned no link token");
+  return res.link_token;
+}
+
+/** Exchanges the short-lived public token from Plaid Link for a long-lived access token. */
+export async function exchangePublicToken(client: PlaidApi, publicToken: string): Promise<{ accessToken: string; itemId: string }> {
+  const res = await client.item.exchangePublicToken({ public_token: publicToken });
+  if (typeof res?.access_token !== "string" || typeof res?.item_id !== "string") {
+    throw new Error("Plaid returned no access token");
   }
-  return data.link_token;
+  return { accessToken: res.access_token, itemId: res.item_id };
+}
+
+/** Revokes an access token at Plaid (used on disconnect). */
+export async function removeItem(client: PlaidApi, accessToken: string): Promise<void> {
+  await client.item.remove({ access_token: accessToken });
+}
+
+/** Public tokens from Plaid Link look like "public-sandbox-<uuid>" / "public-production-<uuid>". */
+export function isValidPublicToken(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 200 && /^public-(sandbox|production|development)-[A-Za-z0-9-]+$/.test(value);
 }

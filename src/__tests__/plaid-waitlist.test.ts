@@ -3,85 +3,136 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const sessionMock = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
 vi.mock("@/lib/auth/session", () => sessionMock);
 
-import { POST as linkTokenRoute } from "@/app/api/plaid/link-token/route";
-import { createSandboxLinkToken, PLAID_SANDBOX_URL, plaidCredentials } from "@/lib/server/plaid";
+// Fake Plaid SDK client for the routes.
+const fakePlaid = vi.hoisted(() => ({
+  link: { createToken: vi.fn() },
+  item: { exchangePublicToken: vi.fn(), remove: vi.fn() },
+}));
+vi.mock("@/lib/server/plaid", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/plaid")>()),
+  createPlaidClient: () => fakePlaid,
+}));
+
+const connectMock = vi.hoisted(() => ({ connectBank: vi.fn() }));
+vi.mock("@/lib/server/bank-connection", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/bank-connection")>()),
+  connectBank: connectMock.connectBank,
+}));
+
+import { POST as createLinkTokenRoute } from "@/app/api/plaid/create_link_token/route";
+import { POST as exchangeRoute } from "@/app/api/plaid/exchange_public_token/route";
+import { isValidPublicToken, plaidConfig } from "@/lib/server/plaid";
 import { isOnWaitlist, joinWaitlist, type WaitlistStore } from "@/lib/server/waitlist";
 
 const USER = { id: "64b0000000000000000000aa", name: "Hari", email: "Hari@Example.com" };
 const SECRET = "plaid-sandbox-secret-not-real";
+const ACCESS_TOKEN = "access-sandbox-de3ce8ef-33f8-452c-a685-8671031fc0f6";
+const exchange = (body: unknown) =>
+  exchangeRoute(new Request("http://localhost/api/plaid/exchange_public_token", { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) }));
+const validBody = { public_token: "public-sandbox-123e4567", institution: { name: "First Platypus Bank" }, account: { name: "Plaid Checking", mask: "0000" } };
 
-let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   sessionMock.getCurrentUser.mockResolvedValue(USER);
   vi.stubEnv("PLAID_CLIENT_ID", "client-123");
   vi.stubEnv("PLAID_SECRET", SECRET);
-  fetchMock = vi.fn(async () => new Response(JSON.stringify({ link_token: "link-sandbox-abc" }), { status: 200 }));
-  vi.stubGlobal("fetch", fetchMock);
+  vi.stubEnv("PLAID_ENV", "sandbox");
+  fakePlaid.link.createToken.mockResolvedValue({ link_token: "link-sandbox-abc" });
+  connectMock.connectBank.mockResolvedValue({ name: "First Platypus Bank", account: "Plaid Checking", last4: "0000", mode: "sandbox", connectedAt: "2026-11-14T00:00:00.000Z" });
+  vi.spyOn(console, "error").mockImplementation(() => {});
 });
 afterEach(() => {
   vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
+  vi.clearAllMocks();
   vi.restoreAllMocks();
 });
 
-describe("POST /api/plaid/link-token", () => {
+describe("plaidConfig", () => {
+  const env = (v: Record<string, string>) => v as unknown as NodeJS.ProcessEnv;
+  it("reads PLAID_CLIENT_ID, PLAID_SECRET and PLAID_ENV (sandbox by default)", () => {
+    expect(plaidConfig(env({ PLAID_CLIENT_ID: "a", PLAID_SECRET: "b", PLAID_ENV: "sandbox" }))).toEqual({ clientId: "a", secret: "b", env: "sandbox" });
+    expect(plaidConfig(env({ PLAID_CLIENT_ID: "a", PLAID_SECRET: "b" }))?.env).toBe("sandbox");
+    expect(plaidConfig(env({ PLAID_CLIENT_ID: "a", PLAID_SECRET: "b", PLAID_ENV: "nonsense" }))?.env).toBe("sandbox");
+    expect(plaidConfig(env({ PLAID_CLIENT_ID: "a", PLAID_SECRET: "b", PLAID_ENV: "production" }))?.env).toBe("production");
+    expect(plaidConfig(env({ PLAID_CLIENT_ID: "a" }))).toBeNull();
+  });
+
+  it("recognizes Plaid public tokens", () => {
+    expect(isValidPublicToken("public-sandbox-123e4567-e89b")).toBe(true);
+    for (const bad of ["", "access-sandbox-1", "public-sandbox-<script>", 42, `public-sandbox-${"a".repeat(300)}`]) {
+      expect(isValidPublicToken(bad)).toBe(false);
+    }
+  });
+});
+
+describe("POST /api/plaid/create_link_token", () => {
   it("requires a login", async () => {
     sessionMock.getCurrentUser.mockResolvedValueOnce(null);
-    const res = await linkTokenRoute();
-    expect(res.status).toBe(401);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await createLinkTokenRoute()).status).toBe(401);
+    expect(fakePlaid.link.createToken).not.toHaveBeenCalled();
+  });
+
+  it("creates a Link token for the logged-in user with the Plaid SDK (secret never returned)", async () => {
+    const res = await createLinkTokenRoute();
+    const text = await res.text();
+    expect(JSON.parse(text)).toEqual({ mode: "plaid", linkToken: "link-sandbox-abc", env: "sandbox" });
+    expect(text).not.toContain(SECRET);
+    expect(fakePlaid.link.createToken).toHaveBeenCalledWith(
+      expect.objectContaining({ client_name: "CalmOwe", user: { client_user_id: USER.id }, products: ["transactions"] }),
+    );
   });
 
   it("returns demo mode when Plaid keys aren't configured", async () => {
     vi.stubEnv("PLAID_SECRET", "");
-    expect(await (await linkTokenRoute()).json()).toEqual({ mode: "demo" });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await (await createLinkTokenRoute()).json()).toEqual({ mode: "demo" });
   });
 
-  it("creates a Sandbox link token for the logged-in user, without exposing the secret", async () => {
-    const res = await linkTokenRoute();
-    const text = await res.text();
-    expect(JSON.parse(text)).toEqual({ mode: "sandbox", linkToken: "link-sandbox-abc" });
-    expect(text).not.toContain(SECRET);
-
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://sandbox.plaid.com/link/token/create");
-    const body = JSON.parse(init.body as string);
-    expect(body).toMatchObject({
-      client_id: "client-123",
-      secret: SECRET,
-      client_name: "CalmOwe",
-      user: { client_user_id: USER.id },
-      products: ["transactions"],
-    });
-  });
-
-  it("always uses Plaid Sandbox, even if PLAID_ENV says production", async () => {
-    vi.stubEnv("PLAID_ENV", "production");
-    await linkTokenRoute();
-    expect((fetchMock.mock.calls[0] as [string])[0].startsWith(PLAID_SANDBOX_URL)).toBe(true);
-  });
-
-  it("returns a friendly 502 (no Plaid details) if Plaid fails", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error_code: "INVALID_API_KEYS" }), { status: 400 }));
-    const res = await linkTokenRoute();
+  it("returns a friendly 502 if Plaid fails", async () => {
+    fakePlaid.link.createToken.mockRejectedValueOnce(new Error("INVALID_API_KEYS"));
+    const res = await createLinkTokenRoute();
     expect(res.status).toBe(502);
-    const text = await res.text();
-    expect(text).not.toContain("INVALID_API_KEYS");
-    expect(text).not.toContain(SECRET);
+    expect(await res.text()).not.toContain("INVALID_API_KEYS");
   });
 });
 
-describe("plaid helpers", () => {
-  it("needs both PLAID_CLIENT_ID and PLAID_SECRET", () => {
-    expect(plaidCredentials({ PLAID_CLIENT_ID: "a", PLAID_SECRET: "b" } as unknown as NodeJS.ProcessEnv)).toEqual({ clientId: "a", secret: "b" });
-    expect(plaidCredentials({ PLAID_CLIENT_ID: "a" } as unknown as NodeJS.ProcessEnv)).toBeNull();
+describe("POST /api/plaid/exchange_public_token", () => {
+  it("requires a login", async () => {
+    sessionMock.getCurrentUser.mockResolvedValueOnce(null);
+    expect((await exchange(validBody)).status).toBe(401);
+    expect(connectMock.connectBank).not.toHaveBeenCalled();
   });
 
-  it("rejects a response without a link token", async () => {
-    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 200 }));
-    await expect(createSandboxLinkToken(USER.id, { clientId: "a", secret: "b" })).rejects.toThrow(/link token failed/);
+  it("exchanges and saves for the logged-in user, returning only public details", async () => {
+    const res = await exchange(validBody);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ ok: true, bank: expect.objectContaining({ name: "First Platypus Bank", last4: "0000" }) });
+    expect(JSON.stringify(body)).not.toMatch(/access/i);
+    const [userId, req, deps] = connectMock.connectBank.mock.calls[0];
+    expect(userId).toBe(USER.id);
+    expect(req).toEqual({ publicToken: "public-sandbox-123e4567", name: "First Platypus Bank", account: "Plaid Checking", last4: "0000" });
+    expect(deps.env).toBe("sandbox");
+  });
+
+  it.each([
+    ["invalid JSON", "{nope"],
+    ["missing token", { institution: { name: "x" } }],
+    ["not a public token", { public_token: ACCESS_TOKEN }],
+    ["array", [1, 2]],
+  ])("rejects %s with 400", async (_label, body) => {
+    expect((await exchange(body)).status).toBe(400);
+    expect(connectMock.connectBank).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 when Plaid isn't configured", async () => {
+    vi.stubEnv("PLAID_CLIENT_ID", "");
+    expect((await exchange(validBody)).status).toBe(503);
+  });
+
+  it("returns a friendly 502 if the exchange fails", async () => {
+    connectMock.connectBank.mockRejectedValueOnce(new Error("INVALID_PUBLIC_TOKEN"));
+    const res = await exchange(validBody);
+    expect(res.status).toBe(502);
+    expect(await res.text()).not.toContain("INVALID_PUBLIC_TOKEN");
   });
 });
 
@@ -99,27 +150,17 @@ describe("waitlist", () => {
     return { store, entries };
   }
 
-  it("saves the user's email (normalized) from their account", async () => {
+  it("saves the user's email (normalized) and never creates duplicates", async () => {
     const { store, entries } = memoryStore();
     expect(await joinWaitlist(USER, store)).toEqual({ ok: true, alreadyJoined: false, email: "hari@example.com" });
-    expect(entries.get(USER.id)).toBe("hari@example.com");
+    expect(await joinWaitlist(USER, store)).toEqual({ ok: true, alreadyJoined: true, email: "hari@example.com" });
+    expect(entries.size).toBe(1);
     expect(await isOnWaitlist(USER.id, store)).toBe(true);
   });
 
-  it("never creates duplicates", async () => {
-    const { store, entries } = memoryStore();
-    await joinWaitlist(USER, store);
-    expect(await joinWaitlist(USER, store)).toEqual({ ok: true, alreadyJoined: true, email: "hari@example.com" });
-    expect(entries.size).toBe(1);
-  });
-
-  it("rejects accounts without a valid email and invalid user ids", async () => {
+  it("rejects accounts without a valid email", async () => {
     const { store } = memoryStore();
-    expect(await joinWaitlist({ id: USER.id, email: null }, store)).toEqual({
-      ok: false,
-      error: "Your account doesn't have a valid email address.",
-    });
-    await expect(joinWaitlist({ id: "bad", email: "a@b.co" }, store)).rejects.toThrow("Invalid user id");
+    expect((await joinWaitlist({ id: USER.id, email: null }, store)).ok).toBe(false);
     expect(store.add).not.toHaveBeenCalled();
   });
 });

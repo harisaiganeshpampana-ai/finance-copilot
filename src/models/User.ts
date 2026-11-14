@@ -14,6 +14,17 @@ const UserSchema = new Schema(
     image: { type: String, maxlength: 2048 },
     // Account balance (whole cents) before the user's transactions; set by sample data.
     openingBalanceCents: { type: Number, default: 0, validate: Number.isSafeInteger },
+    // Connected bank (Plaid). The access token is stored ENCRYPTED (AES-256-GCM) and is
+    // excluded from queries unless explicitly selected. It never leaves the server.
+    plaid: {
+      accessTokenEncrypted: { type: String, select: false },
+      itemId: { type: String },
+      env: { type: String, enum: ["sandbox", "production"] },
+      institutionName: { type: String, maxlength: 80 },
+      accountName: { type: String, maxlength: 60 },
+      accountMask: { type: String, maxlength: 4 },
+      connectedAt: { type: Date },
+    },
   },
   { timestamps: true },
 );

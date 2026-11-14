@@ -34,6 +34,27 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 
 ## Log
 
+### 2026-11-14 — Day 19: Real Plaid connection (Sandbox) with token exchange
+
+**What got done**
+- Installed the Plaid Node SDK (`plaid` v51; `PlaidClient` with `link.createToken`, `item.exchangePublicToken`, `item.remove`) alongside `react-plaid-link`.
+- `POST /api/plaid/create_link_token`: logged-in only; uses `PLAID_CLIENT_ID` / `PLAID_SECRET` / `PLAID_ENV` (sandbox by default; only an explicit "production" switches). No keys → demo mode. Replaces the old `/api/plaid/link-token`.
+- `POST /api/plaid/exchange_public_token`: logged-in only; validates the public token; exchanges it for an `access_token` and saves it on the user's MongoDB document **encrypted with AES-256-GCM** (`src/lib/server/crypto.ts`; key from `ENCRYPTION_KEY`, else derived from `NEXTAUTH_SECRET`). The token is hidden from queries and never returned. Bank/account names from the browser are display-only and cleaned.
+- User model: `plaid` subdocument (encrypted token, itemId, env, institution, account name, mask, connectedAt).
+- Server actions `getBankConnectionStatus` (public details only) and `disconnectBank` (revokes at Plaid via `item.remove`, then deletes).
+- Modal: "Securely connect your bank. CalmOwe uses bank-grade encryption and read-only access." Launches Plaid Link; on success sends the public token to the exchange route, closes, toasts "Bank connected successfully!", and the header shows "Live Data Connected". Connection syncs from MongoDB on load (works across devices).
+- Tests: `bank-connection-server.test.ts` (encryption, exchange, isolation, revoke), rewritten route and UI tests, secret-safety checks (no access tokens in browser code). 305 tests total.
+
+**Blockers / decisions needed**
+- Changing `NEXTAUTH_SECRET` (or setting `ENCRYPTION_KEY` later) makes saved Plaid tokens unreadable; users would reconnect. Consider setting a dedicated `ENCRYPTION_KEY` in Vercel now.
+- Plaid Link covers US banks (country_codes: US). Not India.
+- Transactions are not imported from Plaid yet; the dashboard still shows sample data. Next: `/transactions/sync` into the Transaction model (source "bank").
+- Local `.env.local` still lacks the Plaid keys and `MONGODB_URI` (only on Vercel), so locally it runs in demo mode.
+
+**Tests**
+- [x] `npm test` passes (305)
+- [x] `npm run build` passes
+
 ### 2026-11-14 — Day 18: Plaid Sandbox Connect Bank + waitlist
 
 **What got done**

@@ -47,6 +47,11 @@ describe("secret safety", () => {
     expect(config).toMatch(/logging:\s*\{\s*serverFunctions:\s*false\s*\}/);
   });
 
+  it("Plaid access tokens are never handled in browser code", () => {
+    const offenders = files.filter((f) => /^\s*["']use client["']/.test(f.text) && /access_token|accessToken/.test(f.text));
+    expect(offenders.map((f) => f.path)).toEqual([]);
+  });
+
   it("Plaid credentials are only read on the server", () => {
     const readers = files.filter((f) => /env\.PLAID_(CLIENT_ID|SECRET)/.test(f.text)).map((f) => f.path);
     expect(readers).toEqual(["lib/server/plaid.ts"]);
