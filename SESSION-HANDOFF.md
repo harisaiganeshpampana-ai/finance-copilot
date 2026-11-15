@@ -17,7 +17,7 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 - Plaid (Sandbox): `/api/plaid/create_link_token`, `/api/plaid/exchange_public_token`; access token stored AES-256-GCM encrypted on the user; connection per account.
 - **Monthly Financial Audit (statement upload, current focus)**: "Upload Bank Statement" on the dashboard → `POST /api/statements/upload` (login, PDF / .xlsx / .xls / CSV / TXT, 4 MB, 10 uploads/min, `maxDuration` 60s, optional PDF password + currency fields). Pipeline in `src/lib/server/`: `statement-extract.ts` (file type from bytes; PDF via `unpdf` laid out by header column positions; Excel via SheetJS 0.20.3 from cdn.sheetjs.com; text via papaparse) → `statement-parser.ts` (generic table reader: header detection incl. German/French/Spanish, day- vs month-first dates, decimal commas, currency + bank detection) → if that fails, `statement-ai.ts` (Gemini → OpenAI → DeepSeek, JSON output, every amount must appear in the statement text) → `statement-upload.ts` (one currency per account; `StatementConflictError` otherwise). Rows: `Transaction` `source: "upload"`, deduped by `externalId`. Supported currencies: INR, USD, EUR, GBP. Dashboard/Copilot convert from the data currency (`DataCurrencyProvider`, `convertMinor`); Copilot gets `dataSource` + server-computed `audit`. `unpdf`/`xlsx` are in `serverExternalPackages`.
 - Plaid transaction import (`/transactions/sync`) is built and tested but **parked on branch `plaid-transaction-import`** (not pushed) while live APIs wait for incorporation. Merging it will conflict in `Transaction.ts`, `mockTransactions.ts`, `DashboardView.tsx` ("other" category added on both sides).
-- 404 automated tests (`npm test`), build passes.
+- 406 automated tests (`npm test`), build passes.
 
 **Env vars (Vercel; local .env.local is incomplete)**: MONGODB_URI, NEXTAUTH_SECRET, NEXTAUTH_URL=https://www.calmowe.com, GOOGLE_CLIENT_ID/SECRET, GEMINI_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY, PLAID_CLIENT_ID/SECRET, PLAID_ENV=sandbox. Recommended: add ENCRYPTION_KEY.
 
@@ -63,6 +63,12 @@ Add a new entry at the top of the log for each working day. Keep it short — th
 ---
 
 ## Log
+
+### 2026-11-15 — Day 21: Dashboard crash after a successful upload (fixed)
+
+- A real statement uploaded successfully, then `/dashboard` crashed ("This page couldn't load", digest 3984371213): the server-rendered `DashboardView` called `formatPeriod()`, which lived in the `"use client"` file `UploadStatement.tsx`. Moved it to `src/lib/statement-format.ts`.
+- New regression test `server-client-boundary.test.ts` scans the source: server files must never call functions imported from `"use client"` files (rendering client components is fine). 406 tests, build passes.
+- Same log window also showed two "Could not connect to any servers in your MongoDB Atlas cluster" errors (the next attempt connected). If they keep appearing: check Atlas → Network Access allows 0.0.0.0/0 (Vercel has no fixed IPs) and the cluster isn't paused.
 
 ### 2026-11-14 — Day 20c: First real upload failed; reader and AI fallback hardened
 

@@ -19,9 +19,10 @@ import {
 import { DataCurrencyProvider, Money } from "@/components/currency/currency-store";
 import { SpendingChart } from "@/components/dashboard/SpendingChart";
 import { GenerateSampleDataButton } from "@/components/dashboard/GenerateSampleDataButton";
-import { formatPeriod, UploadStatementButton } from "@/components/dashboard/UploadStatement";
+import { UploadStatementButton } from "@/components/dashboard/UploadStatement";
 import { WaitlistCard } from "@/components/dashboard/WaitlistCard";
 import { type Category, type FinancialData, MOCK_EXCHANGE_RATES, type StatementInfo } from "@/data/mockTransactions";
+import { formatPeriod } from "@/lib/statement-format";
 import { dailySpending, formatPercent, monthTotals, percentChange, totalBalanceCents } from "@/lib/insights";
 
 const shortDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });

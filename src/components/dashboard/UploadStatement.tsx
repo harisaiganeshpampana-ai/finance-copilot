@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCurrency } from "@/components/currency/currency-store";
+import { formatPeriod } from "@/lib/statement-format";
 import { CURRENCY_CODES, CURRENCY_INFO, type CurrencyCode, formatMinorUnits } from "@/lib/currency";
 import {
   STATEMENT_EXTENSIONS,
@@ -30,9 +31,6 @@ import {
 /** Same limit as the server (the server re-checks everything; this is only for quick feedback). */
 export const CLIENT_MAX_BYTES = 4 * 1024 * 1024;
 
-const longDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-export const formatPeriod = (start: string, end: string) =>
-  `${longDate.format(new Date(`${start}T00:00:00Z`))} – ${longDate.format(new Date(`${end}T00:00:00Z`))}`;
 
 /** Quick checks before uploading. Returns an error message, or null if the file looks fine. */
 export function checkStatementFile(file: { name: string; size: number }): string | null {
